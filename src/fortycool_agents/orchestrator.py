@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Callable
 from uuid import uuid4
 
 from .agents import (
@@ -17,22 +18,39 @@ from .models import (
     ConfidenceTier,
     RunStatus,
     SafetyVerdict,
+    TraceEvent,
 )
 from .providers.fixture import FixtureThermalProvider, ThermalDataProvider
+from .telemetry import TelemetryStore
 
 
 class FortyCoolOrchestrator:
-    def __init__(self, provider: ThermalDataProvider | None = None) -> None:
+    def __init__(
+        self,
+        provider: ThermalDataProvider | None = None,
+        telemetry_store: TelemetryStore | None = None,
+    ) -> None:
         self.provider = provider or FixtureThermalProvider()
+        self.telemetry_store = telemetry_store or TelemetryStore()
         self.planner = PlanningAgent()
         self.temperature_agent = TemperatureIntelligenceAgent(self.provider)
-        self.asset_agent = AssetModelingAgent(self.provider)
+        self.asset_agent = AssetModelingAgent(self.provider, self.telemetry_store)
         self.decision_agent = DecisionAgent()
         self.investment_agent = InvestmentAnalystAgent()
         self.audit_agent = EvidenceAndSafetyAgent()
 
-    async def run(self, request: AnalysisRequest) -> AnalysisResponse:
-        context = RunContext(run_id=uuid4().hex, request=request.model_copy(deep=True))
+    async def run(
+        self,
+        request: AnalysisRequest,
+        *,
+        run_id: str | None = None,
+        event_sink: Callable[[TraceEvent], None] | None = None,
+    ) -> AnalysisResponse:
+        context = RunContext(
+            run_id=run_id or uuid4().hex,
+            request=request.model_copy(deep=True),
+            event_sink=event_sink,
+        )
         self.planner.plan(context)
         await self.temperature_agent.run(context)
         await self.asset_agent.run(context)
@@ -57,7 +75,10 @@ class FortyCoolOrchestrator:
         else:
             status = RunStatus.COMPLETED
 
-        if context.request.simulation.enabled:
+        contains_simulated_evidence = any(
+            item.data_class.value == "simulated" for item in context.evidence
+        )
+        if contains_simulated_evidence:
             tier = ConfidenceTier.INDICATIVE
         elif context.assumptions:
             tier = ConfidenceTier.SCREENING

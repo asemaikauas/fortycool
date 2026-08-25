@@ -15,6 +15,7 @@ class AnalysisMode(str, Enum):
 
 class DataClass(str, Enum):
     OBSERVED = "observed"
+    UPLOADED = "uploaded"
     SIMULATED = "simulated"
     INFERRED = "inferred"
     ASSUMED = "assumed"
@@ -41,10 +42,22 @@ class ConfidenceTier(str, Enum):
     OPERATIONAL = "operational"
 
 
+class JobState(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class FacilityArchetype(str, Enum):
     COLOCATION_WATER_COOLED = "colocation_water_cooled"
     HYPERSCALE_AIR_ECONOMIZED = "hyperscale_air_economized"
     HIGH_DENSITY_HYBRID = "high_density_hybrid"
+
+
+class TelemetrySource(str, Enum):
+    SIMULATED = "simulated"
+    UPLOADED = "uploaded"
 
 
 class SiteInput(BaseModel):
@@ -117,6 +130,17 @@ class SimulationConfig(BaseModel):
         return value
 
 
+class TelemetryConfig(BaseModel):
+    source: TelemetrySource = TelemetrySource.SIMULATED
+    upload_id: str | None = None
+
+    @model_validator(mode="after")
+    def upload_requires_identifier(self) -> "TelemetryConfig":
+        if self.source == TelemetrySource.UPLOADED and not self.upload_id:
+            raise ValueError("telemetry.upload_id is required when source is uploaded")
+        return self
+
+
 class AnalysisRequest(BaseModel):
     site: SiteInput
     analysis_modes: list[AnalysisMode] = Field(
@@ -125,6 +149,7 @@ class AnalysisRequest(BaseModel):
     facility: FacilityProfile = Field(default_factory=FacilityProfile)
     economics: EconomicsInput = Field(default_factory=EconomicsInput)
     constraints: SafetyConstraints = Field(default_factory=SafetyConstraints)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     baseline_year: int = Field(default=2021, ge=2019, le=2026)
     temperature_eligibility_threshold_c: float = Field(default=18.0, ge=-30, le=50)
@@ -212,3 +237,21 @@ class AnalysisResponse(BaseModel):
     trace: list[TraceEvent] = Field(default_factory=list)
     assumptions: list[Assumption] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class TelemetryUpload(BaseModel):
+    upload_id: str
+    rows: int
+    start_timestamp: datetime
+    end_timestamp: datetime
+    median_interval_minutes: float
+    columns: list[str]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RunJobStatus(BaseModel):
+    run_id: str
+    state: JobState
+    event_count: int = 0
+    error: str | None = None
+    response: AnalysisResponse | None = None

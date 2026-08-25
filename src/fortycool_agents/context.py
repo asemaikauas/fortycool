@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from .models import (
     AnalysisRequest,
@@ -26,6 +26,7 @@ class RunContext:
     assumptions: list[Assumption] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     artifacts: dict[str, Any] = field(default_factory=dict)
+    event_sink: Callable[[TraceEvent], None] | None = None
 
     def add_evidence(self, evidence: EvidenceRef) -> str:
         if not any(item.id == evidence.id for item in self.evidence):
@@ -41,12 +42,13 @@ class RunContext:
         evidence_ids: list[str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
-        self.trace.append(
-            TraceEvent(
-                agent=agent,
-                action=action,
-                status=status,
-                evidence_ids=evidence_ids or [],
-                details=details or {},
-            )
+        event = TraceEvent(
+            agent=agent,
+            action=action,
+            status=status,
+            evidence_ids=evidence_ids or [],
+            details=details or {},
         )
+        self.trace.append(event)
+        if self.event_sink is not None:
+            self.event_sink(event)

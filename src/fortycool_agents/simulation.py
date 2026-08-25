@@ -146,3 +146,74 @@ def make_forecast_operating_frame(
         simulated[column] = float(tail[column].median())
     # Forecast load is a projection, not hidden future BMS truth.
     return simulated
+
+
+def enrich_uploaded_bms(
+    uploaded: pd.DataFrame,
+    thermal: ThermalDataset,
+    facility: FacilityProfile,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Align uploaded BMS telemetry with thermal data and fill optional controls.
+
+    Uploaded series are normalized to hourly cadence so model validation and the
+    forecast horizon retain consistent semantics.
+    """
+    warnings: list[str] = []
+    frame = uploaded.copy(deep=True)
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+    frame = (
+        frame.set_index("timestamp")
+        .resample("1h")
+        .mean(numeric_only=True)
+        .interpolate(limit=2)
+        .dropna(subset=["it_load_kw", "cooling_power_kw", "server_inlet_temperature_c"])
+        .reset_index()
+    )
+
+    weather = pd.DataFrame(
+        [
+            {
+                "timestamp": sample.timestamp,
+                "outdoor_temperature_c": sample.site_temperature_c,
+                "control_temperature_c": sample.control_temperature_c,
+                "wet_bulb_temperature_c": sample.wet_bulb_temperature_c,
+                "outdoor_humidity_percent": sample.relative_humidity_percent,
+                "solar_irradiance_w_m2": sample.solar_irradiance_w_m2,
+            }
+            for sample in thermal.samples
+        ]
+    )
+    weather["timestamp"] = pd.to_datetime(weather["timestamp"], utc=True)
+    frame = frame.merge(weather, on="timestamp", how="left", validate="one_to_one")
+    weather_columns = [
+        "outdoor_temperature_c",
+        "control_temperature_c",
+        "wet_bulb_temperature_c",
+        "outdoor_humidity_percent",
+        "solar_irradiance_w_m2",
+    ]
+    if frame[weather_columns].isna().any().any():
+        raise ValueError("thermal provider did not cover the uploaded telemetry interval")
+
+    params = resolve_facility_parameters(facility)
+    defaults: dict[str, float] = {
+        "supply_air_setpoint_c": 19.0,
+        "chilled_water_supply_c": 7.0,
+        "fan_speed_percent": 72.0,
+    }
+    for column, value in defaults.items():
+        if column not in frame.columns:
+            frame[column] = value
+            warnings.append(f"{column} was missing and filled with the digital-twin default {value}")
+    if "economizer_state" not in frame.columns:
+        frame["economizer_state"] = (
+            (frame["outdoor_temperature_c"] < 18)
+            & (frame["outdoor_humidity_percent"] < 75)
+        ).astype(float)
+        warnings.append("economizer_state was inferred from outdoor conditions")
+    if "total_facility_power_kw" not in frame.columns:
+        auxiliary = frame["it_load_kw"] * max(params.pue - 1.0, 0.12) * 0.28
+        frame["total_facility_power_kw"] = (
+            frame["it_load_kw"] + frame["cooling_power_kw"] + auxiliary
+        )
+    return frame, warnings

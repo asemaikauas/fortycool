@@ -55,6 +55,7 @@ class ModelBundle:
     cooling_mae_kw: float
     inlet_mae_c: float
     confidence: float
+    action_response_identifiable: bool
     backtest: pd.DataFrame
 
 
@@ -75,6 +76,11 @@ def train_and_backtest(history: pd.DataFrame) -> ModelBundle:
     )
     normalized_cooling_error = cooling_mae / max(float(holdout["cooling_power_kw"].mean()), 1.0)
     confidence = float(np.clip(1 - normalized_cooling_error * 4 - inlet_mae / 8, 0.45, 0.96))
+    action_response_identifiable = bool(
+        training["supply_air_setpoint_c"].std() >= 0.1
+        or training["chilled_water_supply_c"].std() >= 0.1
+        or training["fan_speed_percent"].std() >= 1.0
+    )
 
     backtest = pd.DataFrame(
         {
@@ -91,5 +97,6 @@ def train_and_backtest(history: pd.DataFrame) -> ModelBundle:
         cooling_mae_kw=round(cooling_mae, 3),
         inlet_mae_c=round(inlet_mae, 3),
         confidence=round(confidence, 4),
+        action_response_identifiable=action_response_identifiable,
         backtest=backtest,
     )

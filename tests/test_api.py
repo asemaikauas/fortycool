@@ -41,3 +41,30 @@ def test_run_can_be_retrieved_with_evidence() -> None:
     assert fetched.status_code == 200
     assert evidence.status_code == 200
     assert evidence.json()["id"] == evidence_id
+
+
+def test_background_job_exposes_trace_stream_and_persists_result() -> None:
+    payload = {
+        "site": {
+            "name": "Background Job Demo",
+            "latitude": 39.01,
+            "longitude": -77.46,
+        },
+        "analysis_modes": ["thermal_drift"],
+        "simulation": {"enabled": True, "seed": 13},
+    }
+    created = client.post("/run-jobs", json=payload)
+
+    assert created.status_code == 202
+    run_id = created.json()["run_id"]
+    job = client.get(f"/run-jobs/{run_id}")
+    stream = client.get(f"/run-jobs/{run_id}/stream")
+    persisted = client.get(f"/runs/{run_id}")
+
+    assert job.status_code == 200
+    assert job.json()["state"] == "completed"
+    assert job.json()["event_count"] > 0
+    assert stream.status_code == 200
+    assert "event: trace" in stream.text
+    assert "event: terminal" in stream.text
+    assert persisted.status_code == 200

@@ -4,9 +4,10 @@ from datetime import datetime, timedelta, timezone
 
 from .context import RunContext
 from .modeling import train_and_backtest
-from .models import AnalysisMode, DataClass, EvidenceRef
+from .models import AnalysisMode, DataClass, EvidenceRef, TelemetrySource
 from .providers.fixture import ThermalDataProvider
-from .simulation import make_forecast_operating_frame, simulate_bms
+from .simulation import enrich_uploaded_bms, make_forecast_operating_frame, simulate_bms
+from .telemetry import TelemetryStore
 from .tools import (
     analyze_thermal_drift,
     apply_demo_defaults,
@@ -65,13 +66,17 @@ class TemperatureIntelligenceAgent:
 
 
 class AssetModelingAgent:
-    def __init__(self, provider: ThermalDataProvider) -> None:
+    def __init__(self, provider: ThermalDataProvider, telemetry_store: TelemetryStore) -> None:
         self.provider = provider
+        self.telemetry_store = telemetry_store
 
     async def run(self, context: RunContext) -> None:
         if AnalysisMode.OPERATIONS_12H not in context.request.analysis_modes:
             return
-        if not context.request.simulation.enabled:
+        if (
+            context.request.telemetry.source == TelemetrySource.SIMULATED
+            and not context.request.simulation.enabled
+        ):
             context.warnings.append(
                 "Uploaded/live BMS ingestion is not configured; enable simulation for this milestone"
             )
@@ -83,8 +88,23 @@ class AssetModelingAgent:
             return
 
         register_facility_assumptions(context)
-        reference_end = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
-        reference_start = reference_end - timedelta(days=context.request.simulation.history_days)
+        uploaded = None
+        if context.request.telemetry.source == TelemetrySource.UPLOADED:
+            try:
+                uploaded = self.telemetry_store.get(str(context.request.telemetry.upload_id))
+            except KeyError:
+                context.warnings.append("Uploaded telemetry was not found or expired")
+                context.event(
+                    "asset_modeling_agent",
+                    "Could not load the requested telemetry upload",
+                    status="blocked",
+                )
+                return
+            reference_start = uploaded["timestamp"].min().to_pydatetime()
+            reference_end = uploaded["timestamp"].max().to_pydatetime() + timedelta(hours=1)
+        else:
+            reference_end = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
+            reference_start = reference_end - timedelta(days=context.request.simulation.history_days)
         history_thermal = await self.provider.history(
             context.request.site,
             reference_start,
@@ -110,21 +130,37 @@ class AssetModelingAgent:
                 },
             )
         )
-        history = simulate_bms(
-            history_thermal, context.request.facility, seed=context.request.simulation.seed + 10
-        )
+        if uploaded is None:
+            history = simulate_bms(
+                history_thermal, context.request.facility, seed=context.request.simulation.seed + 10
+            )
+            telemetry_data_class = DataClass.SIMULATED
+            bms_source = "fortycool://simulator/data-center-digital-twin/v1"
+            bms_description = "Reproducible simulated BMS telemetry driven by thermal inputs"
+        else:
+            history, enrichment_warnings = enrich_uploaded_bms(
+                uploaded, history_thermal, context.request.facility
+            )
+            context.warnings.extend(enrichment_warnings)
+            telemetry_data_class = DataClass.UPLOADED
+            bms_source = f"upload://{context.request.telemetry.upload_id}"
+            bms_description = "Validated user-uploaded BMS telemetry enriched with thermal inputs"
         forecast = make_forecast_operating_frame(
             forecast_thermal,
             context.request.facility,
             history,
             seed=context.request.simulation.seed + 20,
         )
+        if uploaded is not None:
+            recent_load = history["it_load_kw"].tail(len(forecast)).to_numpy()
+            if len(recent_load) == len(forecast):
+                forecast["it_load_kw"] = recent_load
         bms_evidence = context.add_evidence(
             EvidenceRef(
-                id=f"simulated-bms-{context.run_id}",
-                source="fortycool://simulator/data-center-digital-twin/v1",
-                description="Reproducible simulated BMS telemetry driven by thermal inputs",
-                data_class=DataClass.SIMULATED,
+                id=f"bms-telemetry-{context.run_id}",
+                source=bms_source,
+                description=bms_description,
+                data_class=telemetry_data_class,
                 metadata={
                     "seed": context.request.simulation.seed,
                     "rows": len(history),
@@ -134,11 +170,11 @@ class AssetModelingAgent:
         )
         context.event(
             "asset_modeling_agent",
-            f"Generated {len(history)} BMS observations for the digital twin",
+            f"Prepared {len(history)} BMS observations for modeling",
             evidence_ids=[weather_evidence, bms_evidence],
         )
         bundle = train_and_backtest(history)
-        record_model_results(context, bundle)
+        record_model_results(context, bundle, data_class=telemetry_data_class)
         context.artifacts["model_bundle"] = bundle
         context.artifacts["forecast_frame"] = forecast
 

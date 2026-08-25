@@ -194,17 +194,26 @@ def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> 
     )
 
 
-def record_model_results(context: RunContext, bundle: ModelBundle) -> None:
+def record_model_results(
+    context: RunContext, bundle: ModelBundle, *, data_class: DataClass
+) -> None:
+    is_simulated = data_class == DataClass.SIMULATED
+    caveat = (
+        "Backtest uses held-out simulated BMS telemetry"
+        if is_simulated
+        else "Backtest uses held-out user-uploaded BMS telemetry"
+    )
     evidence_id = context.add_evidence(
         EvidenceRef(
             id=f"cooling-model-{context.run_id}",
             source="fortycool://models/ridge-digital-twin/v1",
             description="Cooling-demand and inlet-temperature regression backtest",
-            data_class=DataClass.SIMULATED,
+            data_class=data_class,
             metadata={
                 "cooling_mae_kw": bundle.cooling_mae_kw,
                 "inlet_mae_c": bundle.inlet_mae_c,
                 "holdout_hours": len(bundle.backtest),
+                "action_response_identifiable": bundle.action_response_identifiable,
             },
         )
     )
@@ -216,9 +225,9 @@ def record_model_results(context: RunContext, bundle: ModelBundle) -> None:
                 value=bundle.cooling_mae_kw,
                 unit="kW",
                 confidence=bundle.confidence,
-                data_class=DataClass.SIMULATED,
+                data_class=data_class,
                 evidence_ids=[evidence_id],
-                caveats=["Backtest uses held-out simulated BMS telemetry"],
+                caveats=[caveat],
             ),
             Metric(
                 id="inlet_model_mae_c",
@@ -226,19 +235,23 @@ def record_model_results(context: RunContext, bundle: ModelBundle) -> None:
                 value=bundle.inlet_mae_c,
                 unit="°C",
                 confidence=bundle.confidence,
-                data_class=DataClass.SIMULATED,
+                data_class=data_class,
                 evidence_ids=[evidence_id],
-                caveats=["Backtest uses held-out simulated BMS telemetry"],
+                caveats=[caveat],
             ),
         ]
     )
     context.charts.append(
         Chart(
             id="historical_day_backtest",
-            title="Held-out simulated BMS backtest",
+            title=(
+                "Held-out simulated BMS backtest"
+                if is_simulated
+                else "Held-out uploaded BMS backtest"
+            ),
             kind="line",
             data=dataframe_records(bundle.backtest),
-            data_class=DataClass.SIMULATED,
+            data_class=data_class,
             evidence_ids=[evidence_id],
         )
     )
@@ -269,6 +282,35 @@ def optimize_operations(
     forecast: pd.DataFrame,
     constraints: SafetyConstraints,
 ) -> None:
+    if not bundle.action_response_identifiable:
+        predicted_inlet = float(bundle.inlet_model.predict(forecast).max())
+        context.recommendations.append(
+            Recommendation(
+                id="hold-unidentified-action-response",
+                action="hold_current_settings",
+                description=(
+                    "Telemetry does not contain enough control variation to estimate the effect "
+                    "of changing setpoints or fan speed."
+                ),
+                expected_savings_kwh=0,
+                expected_peak_reduction_kw=0,
+                predicted_max_inlet_temperature_c=round(predicted_inlet, 3),
+                safety_margin_c=0,
+                confidence=bundle.confidence,
+                verdict=SafetyVerdict.INSUFFICIENT_DATA,
+                evidence_ids=[context.artifacts["model_evidence_id"]],
+            )
+        )
+        context.warnings.append(
+            "Operating recommendation withheld: historical action response is not identifiable"
+        )
+        context.event(
+            "evidence_and_safety_agent",
+            "Withheld action because telemetry lacks sufficient control variation",
+            status="blocked",
+            evidence_ids=[context.artifacts["model_evidence_id"]],
+        )
+        return
     required = [
         constraints.maximum_server_inlet_temperature_c,
         constraints.minimum_safety_margin_c,
@@ -392,9 +434,12 @@ def optimize_operations(
     savings = max(0.0, baseline_energy - best.energy_kwh)
     peak_reduction = max(0.0, baseline_peak - best.peak_kw)
     margin = float(constraints.maximum_server_inlet_temperature_c) - best.max_inlet_c
+    contains_simulated_evidence = any(
+        item.data_class == DataClass.SIMULATED for item in context.evidence
+    )
     verdict = (
         SafetyVerdict.APPROVED_WITH_WARNING
-        if context.request.simulation.enabled or context.assumptions
+        if contains_simulated_evidence or context.assumptions
         else SafetyVerdict.APPROVED
     )
     description = (
@@ -454,7 +499,11 @@ def optimize_operations(
                 confidence=bundle.confidence,
                 data_class=DataClass.INFERRED,
                 evidence_ids=[context.artifacts["model_evidence_id"], evidence_id],
-                caveats=["Derived from a simulated facility digital twin"],
+                caveats=[
+                    "Derived from a simulated facility digital twin"
+                    if context.request.telemetry.source.value == "simulated"
+                    else "Derived from uploaded telemetry and modeled forecast conditions"
+                ],
             ),
             Metric(
                 id="forecast_safety_margin_c",
