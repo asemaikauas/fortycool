@@ -1,0 +1,27 @@
+{
+  "site": {
+    "name": "Northern Virginia Demo Campus",
+    "latitude": 39.01,
+    "longitude": -77.46,
+    "timezone": "America/New_York"
+  },
+  "analysis_modes": [
+    "thermal_drift",
+    "operations_12h",
+    "investment"
+  ],
+  "facility": {
+    "archetype": "colocation_water_cooled",
+    "it_capacity_mw": 24
+  },
+  "simulation": {
+    "enabled": true,
+    "seed": 42,
+    "history_days": 60,
+    "interval_minutes": 60,
+    "forecast_hours": 12
+  },
+  "baseline_year": 2021,
+  "temperature_eligibility_threshold_c": 18,
+  "use_demo_defaults": true
+}
