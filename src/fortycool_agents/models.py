@@ -151,7 +151,7 @@ class AnalysisRequest(BaseModel):
     constraints: SafetyConstraints = Field(default_factory=SafetyConstraints)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
-    baseline_year: int = Field(default=2021, ge=2019, le=2026)
+    baseline_year: int = Field(default=2022, ge=2019, le=2026)
     temperature_eligibility_threshold_c: float = Field(default=18.0, ge=-30, le=50)
     use_demo_defaults: bool = True
 

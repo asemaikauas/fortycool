@@ -21,7 +21,7 @@
     "interval_minutes": 60,
     "forecast_hours": 12
   },
-  "baseline_year": 2021,
+  "baseline_year": 2022,
   "temperature_eligibility_threshold_c": 18,
   "use_demo_defaults": true
 }

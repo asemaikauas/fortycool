@@ -31,6 +31,10 @@ def run(request: AnalysisRequest):
     return asyncio.run(FortyCoolOrchestrator().run(request))
 
 
+def test_demo_uses_verified_2022_baseline() -> None:
+    assert demo_request().baseline_year == 2022
+
+
 def test_full_demo_produces_evidence_backed_outputs() -> None:
     response = run(demo_request())
 
