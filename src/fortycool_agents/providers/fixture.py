@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..models import DataClass, SiteInput
 
@@ -34,6 +34,9 @@ class ThermalDataset:
     data_class: DataClass
     source: str
     activity_ids: list[str]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+    heatmap: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,8 @@ class AnnualThermalDataset:
     data_class: DataClass
     source: str
     activity_ids: list[str]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
 
 class ThermalDataProvider(Protocol):

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from .context import RunContext
 from .modeling import train_and_backtest
-from .models import AnalysisMode, DataClass, EvidenceRef, TelemetrySource
+from .models import AnalysisMode, Chart, DataClass, EvidenceRef, TelemetrySource
 from .providers.fixture import ThermalDataProvider
 from .simulation import enrich_uploaded_bms, make_forecast_operating_frame, simulate_bms
 from .telemetry import TelemetryStore
@@ -62,6 +62,7 @@ class TemperatureIntelligenceAgent:
             context.request.temperature_eligibility_threshold_c,
             seed=context.request.simulation.seed,
         )
+        context.warnings.extend(annual.warnings)
         analyze_thermal_drift(context, annual)
 
 
@@ -116,20 +117,80 @@ class AssetModelingAgent:
             context.request.simulation.forecast_hours,
             seed=context.request.simulation.seed,
         )
-        weather_evidence = context.add_evidence(
+        context.warnings.extend(history_thermal.warnings)
+        context.warnings.extend(forecast_thermal.warnings)
+        history_evidence = context.add_evidence(
             EvidenceRef(
-                id=f"operational-weather-{context.run_id}",
+                id=f"historical-weather-{context.run_id}",
                 source=history_thermal.source,
-                description="Historical and forecast thermal inputs for the digital twin",
+                description="Historical thermal inputs used to train the facility digital twin",
                 data_class=history_thermal.data_class,
-                activity_id=history_thermal.activity_ids[0],
-                endpoint="/v1/heatmap",
+                activity_id=(
+                    history_thermal.activity_ids[0] if history_thermal.activity_ids else None
+                ),
                 metadata={
                     "history_hours": len(history_thermal.samples),
-                    "forecast_hours": len(forecast_thermal.samples),
+                    **history_thermal.metadata,
                 },
             )
         )
+        forecast_evidence = context.add_evidence(
+            EvidenceRef(
+                id=f"forecast-weather-{context.run_id}",
+                source=forecast_thermal.source,
+                description="Forecast site and matched-control outdoor thermal conditions",
+                data_class=forecast_thermal.data_class,
+                activity_id=(
+                    forecast_thermal.activity_ids[0]
+                    if forecast_thermal.activity_ids
+                    else None
+                ),
+                endpoint=(
+                    "/v1/heatmap"
+                    if forecast_thermal.metadata.get("observed_hours", 0)
+                    else None
+                ),
+                metadata={
+                    "forecast_hours": len(forecast_thermal.samples),
+                    "activity_ids": forecast_thermal.activity_ids,
+                    **forecast_thermal.metadata,
+                },
+            )
+        )
+        context.artifacts["forecast_evidence_id"] = forecast_evidence
+        context.charts.append(
+            Chart(
+                id="temperature_forecast_12h",
+                title="12-hour site and matched-control temperature timeline",
+                kind="line",
+                data=[
+                    {
+                        "timestamp": sample.timestamp.isoformat(),
+                        "site_temperature_c": sample.site_temperature_c,
+                        "control_temperature_c": sample.control_temperature_c,
+                    }
+                    for sample in forecast_thermal.samples
+                ],
+                data_class=forecast_thermal.data_class,
+                evidence_ids=[forecast_evidence],
+            )
+        )
+        if forecast_thermal.heatmap is not None:
+            context.charts.append(
+                Chart(
+                    id="fortyguard_heatmap",
+                    title="FortyGuard facility thermal map",
+                    kind="geojson",
+                    data=[
+                        {
+                            "timestamp": forecast_thermal.samples[0].timestamp.isoformat(),
+                            "feature_collection": forecast_thermal.heatmap,
+                        }
+                    ],
+                    data_class=forecast_thermal.data_class,
+                    evidence_ids=[forecast_evidence],
+                )
+            )
         if uploaded is None:
             history = simulate_bms(
                 history_thermal, context.request.facility, seed=context.request.simulation.seed + 10
@@ -171,7 +232,7 @@ class AssetModelingAgent:
         context.event(
             "asset_modeling_agent",
             f"Prepared {len(history)} BMS observations for modeling",
-            evidence_ids=[weather_evidence, bms_evidence],
+            evidence_ids=[history_evidence, forecast_evidence, bms_evidence],
         )
         bundle = train_and_backtest(history)
         record_model_results(context, bundle, data_class=telemetry_data_class)

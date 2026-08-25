@@ -20,7 +20,8 @@ from .models import (
     SafetyVerdict,
     TraceEvent,
 )
-from .providers.fixture import FixtureThermalProvider, ThermalDataProvider
+from .providers import build_thermal_provider
+from .providers.fixture import ThermalDataProvider
 from .telemetry import TelemetryStore
 
 
@@ -30,7 +31,7 @@ class FortyCoolOrchestrator:
         provider: ThermalDataProvider | None = None,
         telemetry_store: TelemetryStore | None = None,
     ) -> None:
-        self.provider = provider or FixtureThermalProvider()
+        self.provider = provider or build_thermal_provider()
         self.telemetry_store = telemetry_store or TelemetryStore()
         self.planner = PlanningAgent()
         self.temperature_agent = TemperatureIntelligenceAgent(self.provider)

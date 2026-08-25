@@ -20,7 +20,7 @@ from .telemetry import TelemetryStore, TelemetryValidationError
 app = FastAPI(
     title="FortyCool Agent Service",
     version="0.1.0",
-    description="Evidence-first thermal decision tools for a simulated data-center digital twin.",
+    description="Evidence-first thermal decision tools for a hybrid data-center digital twin.",
 )
 telemetry_store = TelemetryStore()
 orchestrator = FortyCoolOrchestrator(telemetry_store=telemetry_store)

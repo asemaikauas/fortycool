@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import numpy as np
@@ -19,7 +19,7 @@ from .models import (
     SafetyConstraints,
     SafetyVerdict,
 )
-from .providers.fixture import AnnualThermalDataset, ThermalDataset
+from .providers.fixture import AnnualThermalDataset
 from .simulation import resolve_facility_parameters
 
 
@@ -109,14 +109,16 @@ def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> 
         EvidenceRef(
             id=f"thermal-{context.run_id}",
             source=annual.source,
-            description="Annual site and matched-control temperature summaries",
+            description="Site and matched-control historical temperature summaries",
             data_class=annual.data_class,
             activity_id=annual.activity_ids[0] if annual.activity_ids else None,
-            endpoint="/v1/heatmap",
+            endpoint=("/v1/heatmap" if annual.metadata.get("observed_years") else None),
             metadata={
                 "baseline_year": rows[0].year,
                 "latest_year": rows[-1].year,
                 "threshold_c": context.request.temperature_eligibility_threshold_c,
+                "activity_ids": annual.activity_ids,
+                **annual.metadata,
             },
         )
     )
@@ -447,6 +449,9 @@ def optimize_operations(
         f"{best.chilled_water_delta_c:.1f}°C, and adjust fan speed by "
         f"{best.fan_delta_percent:.0f} percentage points for the forecast window."
     )
+    decision_evidence_ids = [context.artifacts["model_evidence_id"], evidence_id]
+    if forecast_evidence_id := context.artifacts.get("forecast_evidence_id"):
+        decision_evidence_ids.insert(1, forecast_evidence_id)
     recommendation = Recommendation(
         id="optimized-12h-plan",
         action="apply_simulated_12h_plan",
@@ -463,7 +468,7 @@ def optimize_operations(
             "server_inlet_safety_margin",
             "minimum_model_confidence",
         ],
-        evidence_ids=[context.artifacts["model_evidence_id"], evidence_id],
+        evidence_ids=decision_evidence_ids,
     )
     context.recommendations.append(recommendation)
 
@@ -486,7 +491,7 @@ def optimize_operations(
             kind="area",
             data=dataframe_records(baseline),
             data_class=DataClass.INFERRED,
-            evidence_ids=[context.artifacts["model_evidence_id"], evidence_id],
+            evidence_ids=decision_evidence_ids,
         )
     )
     context.metrics.extend(
@@ -498,7 +503,7 @@ def optimize_operations(
                 unit="kWh",
                 confidence=bundle.confidence,
                 data_class=DataClass.INFERRED,
-                evidence_ids=[context.artifacts["model_evidence_id"], evidence_id],
+                evidence_ids=decision_evidence_ids,
                 caveats=[
                     "Derived from a simulated facility digital twin"
                     if context.request.telemetry.source.value == "simulated"
@@ -512,20 +517,20 @@ def optimize_operations(
                 unit="°C",
                 confidence=bundle.confidence,
                 data_class=DataClass.INFERRED,
-                evidence_ids=[context.artifacts["model_evidence_id"], evidence_id],
+                evidence_ids=decision_evidence_ids,
             ),
         ]
     )
     context.event(
         "decision_agent",
         f"Evaluated {len(candidates)} actions and retained {len(safe_candidates)} safe candidates",
-        evidence_ids=[evidence_id],
+        evidence_ids=decision_evidence_ids,
     )
     context.event(
         "evidence_and_safety_agent",
         f"Approved the advisory plan with a {margin:.2f}°C modeled safety margin",
         status=verdict.value,
-        evidence_ids=[evidence_id],
+        evidence_ids=decision_evidence_ids,
     )
 
 
