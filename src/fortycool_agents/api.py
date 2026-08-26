@@ -4,11 +4,14 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response, 
 from fastapi.responses import StreamingResponse
 
 from .catalog import serialized_catalog
+from .copilot import CopilotError, CopilotUnavailableError, FortyCoolCopilot
 from .jobs import RunJobManager
 from .models import (
     AnalysisMode,
     AnalysisRequest,
     AnalysisResponse,
+    CopilotRequest,
+    CopilotResponse,
     RunJobStatus,
     TelemetryUpload,
 )
@@ -26,11 +29,17 @@ telemetry_store = TelemetryStore()
 orchestrator = FortyCoolOrchestrator(telemetry_store=telemetry_store)
 run_repository = RunRepository()
 job_manager = RunJobManager(orchestrator, run_repository)
+copilot_service = FortyCoolCopilot()
 
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "thermal_provider": type(orchestrator.provider).__name__}
+    return {
+        "status": "ok",
+        "thermal_provider": type(orchestrator.provider).__name__,
+        "copilot": "configured" if copilot_service.configured else "not_configured",
+        "copilot_model": copilot_service.model,
+    }
 
 
 @app.get("/tools")
@@ -46,6 +55,16 @@ async def analysis_request_schema() -> dict:
 @app.get("/schemas/analysis-response")
 async def analysis_response_schema() -> dict:
     return AnalysisResponse.model_json_schema()
+
+
+@app.get("/schemas/copilot-request")
+async def copilot_request_schema() -> dict:
+    return CopilotRequest.model_json_schema()
+
+
+@app.get("/schemas/copilot-response")
+async def copilot_response_schema() -> dict:
+    return CopilotResponse.model_json_schema()
 
 
 @app.post("/telemetry/uploads", response_model=TelemetryUpload, status_code=status.HTTP_201_CREATED)
@@ -146,6 +165,19 @@ async def get_run(run_id: str) -> AnalysisResponse:
     if response is None:
         raise HTTPException(status_code=404, detail="run not found")
     return response
+
+
+@app.post("/runs/{run_id}/copilot", response_model=CopilotResponse)
+async def ask_copilot(run_id: str, request: CopilotRequest) -> CopilotResponse:
+    response = run_repository.get(run_id)
+    if response is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    try:
+        return await copilot_service.answer(response, request)
+    except CopilotUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except CopilotError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.get("/runs/{run_id}/events")

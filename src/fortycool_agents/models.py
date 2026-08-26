@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class AnalysisMode(str, Enum):
@@ -58,6 +58,12 @@ class FacilityArchetype(str, Enum):
 class TelemetrySource(str, Enum):
     SIMULATED = "simulated"
     UPLOADED = "uploaded"
+
+
+class CopilotAudience(str, Enum):
+    OPERATOR = "operator"
+    INVESTMENT_COMMITTEE = "investment_committee"
+    TECHNICAL_REVIEWER = "technical_reviewer"
 
 
 class SiteInput(BaseModel):
@@ -255,3 +261,33 @@ class RunJobStatus(BaseModel):
     event_count: int = 0
     error: str | None = None
     response: AnalysisResponse | None = None
+
+
+class CopilotRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=2000)
+    audience: CopilotAudience = CopilotAudience.OPERATOR
+
+    @field_validator("question")
+    @classmethod
+    def question_cannot_be_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("question cannot be blank")
+        return stripped
+
+
+class CopilotDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = Field(min_length=1, max_length=6000)
+    key_findings: list[str] = Field(max_length=5)
+    cautions: list[str] = Field(max_length=5)
+    evidence_ids: list[str] = Field(max_length=20)
+    suggested_questions: list[str] = Field(max_length=4)
+
+
+class CopilotResponse(CopilotDraft):
+    run_id: str
+    model: str
+    response_id: str
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

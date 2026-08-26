@@ -1,6 +1,8 @@
+import fortycool_agents.api as api_module
 from fastapi.testclient import TestClient
 
 from fortycool_agents.api import app
+from fortycool_agents.models import CopilotResponse
 
 
 client = TestClient(app)
@@ -16,8 +18,13 @@ def test_health_and_tool_catalog() -> None:
     assert {item["name"] for item in tools.json()} >= {
         "calculate_local_drift",
         "evaluate_operating_scenarios",
+        "explain_completed_analysis",
         "review_recommendation_safety",
     }
+
+    copilot_schema = client.get("/schemas/copilot-request")
+    assert copilot_schema.status_code == 200
+    assert "question" in copilot_schema.json()["properties"]
 
 
 def test_run_can_be_retrieved_with_evidence() -> None:
@@ -68,3 +75,49 @@ def test_background_job_exposes_trace_stream_and_persists_result() -> None:
     assert "event: trace" in stream.text
     assert "event: terminal" in stream.text
     assert persisted.status_code == 200
+
+
+def test_copilot_endpoint_grounds_answer_in_persisted_run(monkeypatch) -> None:
+    payload = {
+        "site": {
+            "name": "Copilot Demo",
+            "latitude": 39.01,
+            "longitude": -77.46,
+        },
+        "analysis_modes": ["thermal_drift"],
+        "simulation": {"enabled": True, "seed": 19},
+    }
+    created = client.post("/runs", json=payload)
+    run_id = created.json()["run_id"]
+    evidence_id = created.json()["evidence"][0]["id"]
+
+    class StubCopilot:
+        configured = True
+        model = "gpt-4o"
+
+        async def answer(self, run, request):
+            assert run.run_id == run_id
+            assert request.question == "What should the operator know?"
+            return CopilotResponse(
+                run_id=run_id,
+                model="gpt-4o",
+                response_id="resp_api_test",
+                answer="The analysis is indicative and advisory.",
+                key_findings=["The site was compared with a matched control."],
+                cautions=["Historical inputs are simulated in fixture mode."],
+                evidence_ids=[evidence_id],
+                suggested_questions=["Which facility inputs should be confirmed?"],
+            )
+
+    monkeypatch.setattr(api_module, "copilot_service", StubCopilot())
+    response = client.post(
+        f"/runs/{run_id}/copilot",
+        json={
+            "question": "What should the operator know?",
+            "audience": "operator",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["model"] == "gpt-4o"
+    assert response.json()["evidence_ids"] == [evidence_id]

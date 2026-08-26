@@ -85,6 +85,16 @@ TOOL_CATALOG = [
         description="Resolve the lineage records supporting a metric or recommendation.",
         invocation_path=None,
     ),
+    ToolDefinition(
+        name="explain_completed_analysis",
+        owner="copilot_agent",
+        description=(
+            "Use GPT-4o to answer an operator or investor question from a completed, "
+            "evidence-backed analysis."
+        ),
+        invocation_path="/runs/{run_id}/copilot",
+        deterministic=False,
+    ),
 ]
 
 
