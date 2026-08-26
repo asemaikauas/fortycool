@@ -21,7 +21,11 @@ from .models import (
     SafetyVerdict,
 )
 from .providers.fixture import AnnualThermalDataset
-from .providers.urban import UrbanContextDataset, canonical_land_cover
+from .providers.urban import (
+    UrbanContextDataset,
+    canonical_land_cover,
+    tree_canopy_share,
+)
 from .simulation import resolve_facility_parameters
 
 
@@ -99,18 +103,22 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
         urban.metadata.get("historical_change_available") and baseline is not None
     )
     control_quality_passed = bool(urban.metadata.get("control_quality_passed"))
+    historical_control_stability_verified = bool(
+        urban.metadata.get("historical_control_stability_verified")
+    )
+    land_cover_provider = str(
+        urban.metadata.get("land_cover_provider", "fortyguard_satellite_segmentation")
+    )
+    annual_land_cover_series = list(urban.metadata.get("annual_land_cover_series", []))
     satellite_evidence_id = context.add_evidence(
         EvidenceRef(
             id=f"satellite-land-cover-{context.run_id}",
             source=urban.source,
-            description=(
-                "Satellite segmentation for the site and regional control candidates"
-            ),
+            description="Satellite land-cover history for the site and control candidates",
             data_class=urban.data_class,
             activity_id=urban.activity_ids[0] if urban.activity_ids else None,
-            endpoint=(
-                "/v1/satellite" if urban.data_class == DataClass.OBSERVED else None
-            ),
+            endpoint=urban.metadata.get("endpoint")
+            or ("/v1/satellite" if urban.data_class == DataClass.OBSERVED else None),
             metadata={
                 "activity_ids": urban.activity_ids,
                 "site_requested_dates": [
@@ -164,13 +172,13 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
                 data_class=urban.data_class,
                 evidence_ids=[satellite_evidence_id],
                 caveats=[
-                    "Built surface combines segmentation classes for buildings and transport surfaces"
+                    "Built share follows the source model's classification of developed surfaces"
                 ],
             ),
             Metric(
                 id="current_tree_canopy_share_percent",
                 label="Current tree-canopy share",
-                value=round(latest_groups["vegetation"], 3),
+                value=tree_canopy_share(latest.segments),
                 unit="%",
                 confidence=0.9 if urban.data_class == DataClass.OBSERVED else 0.7,
                 data_class=urban.data_class,
@@ -189,9 +197,15 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
                 confidence=0.78 if urban.data_class == DataClass.OBSERVED else 0.65,
                 data_class=DataClass.INFERRED,
                 evidence_ids=[satellite_evidence_id, control_evidence_id],
-                caveats=[
-                    "Similarity is based on current imagery and does not establish historical stability"
-                ],
+                caveats=(
+                    [
+                        "Historical coverage was verified for selected controls; classification uncertainty remains"
+                    ]
+                    if historical_control_stability_verified
+                    else [
+                        "Similarity is based on current imagery and does not establish historical stability"
+                    ]
+                ),
             ),
             Metric(
                 id="regional_control_match_status",
@@ -235,7 +249,9 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
                     id="tree_canopy_change_percentage_points",
                     label="Tree-canopy change",
                     value=round(
-                        latest_groups["vegetation"] - baseline_groups["vegetation"], 3
+                        tree_canopy_share(latest.segments)
+                        - tree_canopy_share(baseline.segments),
+                        3,
                     ),
                     unit="percentage points",
                     confidence=0.8 if urban.data_class == DataClass.OBSERVED else 0.65,
@@ -252,14 +268,58 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
                 value="not_available",
                 unit="status",
                 confidence=1.0,
-                data_class=DataClass.OBSERVED,
+                data_class=urban.data_class,
                 evidence_ids=[satellite_evidence_id],
                 caveats=[
-                    "Baseline and latest requests resolved to the same image year; no change was calculated"
+                    "Baseline and latest requests did not resolve to distinct usable image years; no change was calculated"
                 ],
             )
         )
 
+    if len(annual_land_cover_series) >= 2:
+        first_land_cover = annual_land_cover_series[0]
+        latest_land_cover = annual_land_cover_series[-1]
+        context.metrics.extend(
+            [
+                Metric(
+                    id="local_excess_built_surface_change_percentage_points",
+                    label="Local excess built-surface change versus controls",
+                    value=round(
+                        float(latest_land_cover["local_excess_built_surface_percent"])
+                        - float(first_land_cover["local_excess_built_surface_percent"]),
+                        3,
+                    ),
+                    unit="percentage points",
+                    confidence=(
+                        0.76 if urban.data_class == DataClass.OBSERVED else 0.62
+                    ),
+                    data_class=DataClass.INFERRED,
+                    evidence_ids=[satellite_evidence_id, control_evidence_id],
+                    caveats=[
+                        "Dynamic World is a modeled classification; this comparison does not establish causality"
+                    ],
+                ),
+                Metric(
+                    id="land_cover_history_coverage_years",
+                    label="Land-cover history coverage",
+                    value=len(annual_land_cover_series),
+                    unit="years",
+                    confidence=1.0,
+                    data_class=urban.data_class,
+                    evidence_ids=[satellite_evidence_id],
+                ),
+            ]
+        )
+        context.charts.append(
+            Chart(
+                id="historical_land_cover_timeseries",
+                title="Annual site-versus-control land-cover history",
+                kind="line",
+                data=annual_land_cover_series,
+                data_class=urban.data_class,
+                evidence_ids=[satellite_evidence_id, control_evidence_id],
+            )
+        )
     snapshots = [latest, *(control.snapshot for control in urban.matched_controls)]
     control_scores = {
         control.snapshot.label: control.similarity_score
@@ -269,9 +329,9 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
         Chart(
             id="satellite_land_cover_context",
             title=(
-                "FortyGuard satellite land cover: site and matched controls"
+                f"{land_cover_provider}: site and matched controls"
                 if control_quality_passed
-                else "FortyGuard satellite land cover: site and rejected candidates"
+                else f"{land_cover_provider}: site and rejected candidates"
             ),
             kind="stacked_bar",
             data=[
@@ -340,6 +400,8 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
     context.artifacts["historical_satellite_change_available"] = (
         historical_change_available
     )
+    context.artifacts["annual_land_cover_series"] = annual_land_cover_series
+    context.artifacts["satellite_land_cover_evidence_id"] = satellite_evidence_id
     context.event(
         "urban_change_agent",
         (
@@ -478,6 +540,87 @@ def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> 
             evidence_ids=[evidence_id, calc_id],
         )
     )
+    land_cover_series = list(context.artifacts.get("annual_land_cover_series", []))
+    land_cover_by_year = {
+        int(item["year"]): item
+        for item in land_cover_series
+        if "year" in item and "local_excess_built_surface_percent" in item
+    }
+    paired_attribution = [
+        {
+            "year": item.year,
+            "site_control_temperature_gap_c": round(
+                item.site_mean_temperature_c - item.control_mean_temperature_c, 4
+            ),
+            "local_excess_built_surface_percent": float(
+                land_cover_by_year[item.year]["local_excess_built_surface_percent"]
+            ),
+        }
+        for item in rows
+        if item.year in land_cover_by_year
+    ]
+    if len(paired_attribution) >= 3 and context.artifacts.get("matched_control_sites"):
+        thermal_values = np.array(
+            [item["site_control_temperature_gap_c"] for item in paired_attribution],
+            dtype=float,
+        )
+        built_values = np.array(
+            [item["local_excess_built_surface_percent"] for item in paired_attribution],
+            dtype=float,
+        )
+        if np.std(thermal_values) > 1e-9 and np.std(built_values) > 1e-9:
+            correlation = float(np.corrcoef(thermal_values, built_values)[0, 1])
+            satellite_evidence_id = context.artifacts.get(
+                "satellite_land_cover_evidence_id"
+            )
+            attribution_evidence_id = context.add_evidence(
+                EvidenceRef(
+                    id=f"thermal-land-cover-attribution-{context.run_id}",
+                    source="fortycool://analytics/thermal-land-cover-association/v1",
+                    description=(
+                        "Association between annual local thermal gaps and local excess "
+                        "built-surface share"
+                    ),
+                    data_class=DataClass.INFERRED,
+                    metadata={
+                        "formula": (
+                            "Pearson correlation(site-control temperature gap, "
+                            "site-control built-surface share)"
+                        ),
+                        "paired_years": [item["year"] for item in paired_attribution],
+                        "observations": paired_attribution,
+                    },
+                )
+            )
+            attribution_evidence_ids = [
+                evidence_id,
+                attribution_evidence_id,
+                *([satellite_evidence_id] if satellite_evidence_id else []),
+            ]
+            context.metrics.append(
+                Metric(
+                    id="thermal_land_cover_association_correlation",
+                    label="Thermal-gap versus local built-surface association",
+                    value=round(correlation, 3),
+                    unit="correlation",
+                    confidence=max(0.0, confidence - 0.2),
+                    data_class=DataClass.INFERRED,
+                    evidence_ids=attribution_evidence_ids,
+                    caveats=[
+                        "A small-sample temporal association supports a hypothesis but does not establish causality"
+                    ],
+                )
+            )
+            context.charts.append(
+                Chart(
+                    id="thermal_land_cover_attribution",
+                    title="Thermal drift and local land-cover change",
+                    kind="dual_axis_line",
+                    data=paired_attribution,
+                    data_class=DataClass.INFERRED,
+                    evidence_ids=attribution_evidence_ids,
+                )
+            )
     context.artifacts["local_thermal_drift_c"] = latest_local_drift
     context.artifacts["temperature_eligible_hours_lost"] = lost_eligible_hours
     context.event(

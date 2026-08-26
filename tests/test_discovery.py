@@ -87,6 +87,34 @@ def test_control_quality_failure_cannot_produce_a_winner() -> None:
     assert "control_quality_gate_failed" in result.rejection_reasons
 
 
+def test_missing_historical_land_cover_cannot_produce_a_winner() -> None:
+    class CurrentImageryOnlyProvider:
+        async def analyze(self, site, baseline_year, end_year, *, seed):
+            urban = await FixtureUrbanProvider().analyze(
+                site, baseline_year, end_year, seed=seed
+            )
+            return replace(
+                urban,
+                metadata={
+                    **urban.metadata,
+                    "historical_change_available": False,
+                    "complete_history_years": [],
+                },
+            )
+
+    candidate = public_catalog()[0]
+    agent = SiteDiscoveryAgent(FixtureThermalProvider(), CurrentImageryOnlyProvider())
+
+    response = asyncio.run(agent.run(DiscoveryRequest(candidates=[candidate])))
+
+    assert response.status == DiscoveryStatus.NO_QUALIFIED_CANDIDATE
+    assert response.winner is None
+    result = response.candidates[0]
+    assert result.control_match_status == "accepted"
+    assert result.historical_land_cover_status == "not_available"
+    assert "historical_land_cover_unavailable" in result.rejection_reasons
+
+
 def test_live_flat_screen_skips_satellite_and_returns_no_qualified_site() -> None:
     candidate = public_catalog()[0]
 

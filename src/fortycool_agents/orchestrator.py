@@ -99,6 +99,12 @@ class FortyCoolOrchestrator:
         metric_map = {metric.id: metric for metric in context.metrics}
         drift = metric_map.get("local_thermal_drift_c")
         built_change = metric_map.get("built_surface_change_percentage_points")
+        local_built_change = metric_map.get(
+            "local_excess_built_surface_change_percentage_points"
+        )
+        land_cover_association = metric_map.get(
+            "thermal_land_cover_association_correlation"
+        )
         npv = metric_map.get("thermal_drift_npv")
         recommendation = next(
             (
@@ -113,9 +119,19 @@ class FortyCoolOrchestrator:
             summary_parts.append(
                 f"Local thermal drift is {drift.value}{drift.unit} versus control"
             )
-        if built_change:
+        if local_built_change:
+            summary_parts.append(
+                "local built surface changed by "
+                f"{local_built_change.value} {local_built_change.unit} versus controls"
+            )
+        elif built_change:
             summary_parts.append(
                 f"built surface changed by {built_change.value} {built_change.unit}"
+            )
+        if land_cover_association:
+            summary_parts.append(
+                "thermal/land-cover association is "
+                f"{land_cover_association.value} {land_cover_association.unit}"
             )
         if npv:
             summary_parts.append(f"indicative exposure is {npv.value} {npv.unit}")

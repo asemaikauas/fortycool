@@ -1,5 +1,10 @@
 import os
 
+from .dynamic_world import (
+    DynamicWorldError,
+    DynamicWorldUrbanProvider,
+    EarthEngineDynamicWorldClient,
+)
 from .fixture import FixtureThermalProvider, ThermalDataProvider
 from .fortyguard import FortyGuardClient, FortyGuardError
 from .live import FortyGuardThermalProvider
@@ -32,11 +37,12 @@ def build_urban_provider(
         and isinstance(thermal_provider, FortyGuardThermalProvider)
         and isinstance(thermal_provider.client, FortyGuardClient)
     )
+    configured_mode = mode or os.getenv("FORTYCOOL_URBAN_PROVIDER")
     selected = (
         (
-            "live"
-            if inferred_live_mode
-            else mode or os.getenv("FORTYCOOL_THERMAL_PROVIDER", "fixture")
+            configured_mode
+            or ("live" if inferred_live_mode else None)
+            or os.getenv("FORTYCOOL_THERMAL_PROVIDER", "fixture")
         )
         .strip()
         .lower()
@@ -59,12 +65,19 @@ def build_urban_provider(
                 "FORTYCOOL_THERMAL_PROVIDER=live requires FORTYGUARD_API_KEY"
             )
         return FortyGuardUrbanProvider(client)
-    raise ValueError("FORTYCOOL_THERMAL_PROVIDER must be 'fixture' or 'live'")
+    if selected == "dynamic_world":
+        return DynamicWorldUrbanProvider()
+    raise ValueError(
+        "FORTYCOOL_URBAN_PROVIDER must be 'fixture', 'live', or 'dynamic_world'"
+    )
 
 
 __all__ = [
     "build_thermal_provider",
     "build_urban_provider",
+    "DynamicWorldError",
+    "DynamicWorldUrbanProvider",
+    "EarthEngineDynamicWorldClient",
     "FixtureThermalProvider",
     "FortyGuardClient",
     "FortyGuardError",

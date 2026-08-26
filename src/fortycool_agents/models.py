@@ -318,6 +318,7 @@ class DiscoveryRequest(BaseModel):
     minimum_local_drift_c: float = Field(default=0.10, ge=0, le=5)
     minimum_control_match_score: float = Field(default=0.65, ge=0, le=1)
     shortlist_size: int = Field(default=1, ge=1, le=3)
+    require_historical_land_cover: bool = True
     temperature_eligibility_threshold_c: float = Field(default=18.0, ge=-30, le=50)
     seed: int = 42
 
@@ -341,6 +342,7 @@ class DiscoveryCandidateResult(BaseModel):
     passed_drift_screen: bool
     control_match_score: float | None = Field(default=None, ge=0, le=1)
     control_match_status: str = "not_evaluated"
+    historical_land_cover_status: str = "not_evaluated"
     validated_local_drift_c: float | None = None
     full_history_years: list[int] = Field(default_factory=list)
     qualified: bool = False

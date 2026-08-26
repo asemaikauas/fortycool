@@ -206,6 +206,9 @@ class SiteDiscoveryAgent:
                     "minimum_local_drift_c": request.minimum_local_drift_c,
                     "minimum_control_match_score": request.minimum_control_match_score,
                     "shortlist_size": request.shortlist_size,
+                    "require_historical_land_cover": (
+                        request.require_historical_land_cover
+                    ),
                 },
             )
         ]
@@ -344,15 +347,27 @@ class SiteDiscoveryAgent:
                 minimum_similarity = float(
                     urban.metadata.get("minimum_selected_similarity", 0.0)
                 )
-                result.control_match_score = round(
-                    fmean(
-                        control.similarity_score for control in urban.matched_controls
-                    ),
-                    4,
+                similarity_scores = [
+                    control.similarity_score for control in urban.matched_controls
+                ]
+                result.control_match_score = (
+                    round(fmean(similarity_scores), 4) if similarity_scores else 0.0
                 )
                 controls_passed = bool(
-                    len(urban.matched_controls) >= 3
+                    urban.metadata.get("control_quality_passed")
+                    and len(urban.matched_controls) >= 3
                     and minimum_similarity >= request.minimum_control_match_score
+                )
+                complete_history_years = list(
+                    urban.metadata.get("complete_history_years", [])
+                )
+                historical_land_cover_available = bool(
+                    urban.metadata.get("historical_change_available")
+                    and request.baseline_year in complete_history_years
+                    and request.end_year in complete_history_years
+                )
+                result.historical_land_cover_status = (
+                    "available" if historical_land_cover_available else "not_available"
                 )
                 result.control_match_status = (
                     "accepted" if controls_passed else "rejected"
@@ -369,7 +384,8 @@ class SiteDiscoveryAgent:
                         activity_id=(
                             urban.activity_ids[0] if urban.activity_ids else None
                         ),
-                        endpoint=(
+                        endpoint=urban.metadata.get("endpoint")
+                        or (
                             "/v1/satellite"
                             if urban.data_class == DataClass.OBSERVED
                             else None
@@ -380,6 +396,9 @@ class SiteDiscoveryAgent:
                             "minimum_similarity": minimum_similarity,
                             "required_minimum_similarity": (
                                 request.minimum_control_match_score
+                            ),
+                            "historical_land_cover_available": (
+                                historical_land_cover_available
                             ),
                             **urban.metadata,
                         },
@@ -393,6 +412,23 @@ class SiteDiscoveryAgent:
                             agent="site_discovery_agent",
                             action=(
                                 f"Rejected {candidate.site.name} after control-quality validation"
+                            ),
+                            status="rejected",
+                            evidence_ids=[satellite_evidence_id],
+                        )
+                    )
+                    continue
+                if (
+                    request.require_historical_land_cover
+                    and not historical_land_cover_available
+                ):
+                    result.rejection_reasons.append("historical_land_cover_unavailable")
+                    trace.append(
+                        TraceEvent(
+                            agent="site_discovery_agent",
+                            action=(
+                                f"Rejected {candidate.site.name} because historical "
+                                "land-cover coverage was unavailable"
                             ),
                             status="rejected",
                             evidence_ids=[satellite_evidence_id],
@@ -511,6 +547,9 @@ class SiteDiscoveryAgent:
                 "screening_local_drift_c": result.screening_local_drift_c,
                 "minimum_local_drift_c": request.minimum_local_drift_c,
                 "control_match_score": result.control_match_score,
+                "historical_land_cover_status": (
+                    result.historical_land_cover_status
+                ),
                 "validated_local_drift_c": result.validated_local_drift_c,
                 "qualified": result.qualified,
                 "rejection_reasons": result.rejection_reasons,

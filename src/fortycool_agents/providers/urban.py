@@ -4,6 +4,7 @@ import asyncio
 import math
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
+from statistics import fmean
 from typing import Any, Callable, Protocol
 
 from ..models import DataClass, SiteInput
@@ -63,7 +64,7 @@ def canonical_land_cover(segments: dict[str, float]) -> dict[str, float]:
     for raw_label, raw_value in segments.items():
         label = raw_label.strip().lower()
         value = float(raw_value)
-        if "building" in label or "structure" in label:
+        if any(token in label for token in ("building", "structure", "built")):
             groups["building"] += value
         elif any(
             token in label
@@ -72,16 +73,38 @@ def canonical_land_cover(segments: dict[str, float]) -> dict[str, float]:
             groups["transport_surface"] += value
         elif any(
             token in label
-            for token in ("tree", "vegetation", "grass", "plant", "forest")
+            for token in (
+                "tree",
+                "vegetation",
+                "grass",
+                "plant",
+                "forest",
+                "crop",
+                "shrub",
+                "flooded_vegetation",
+            )
         ):
             groups["vegetation"] += value
-        elif any(token in label for token in ("earth", "ground", "soil", "sand")):
+        elif any(
+            token in label for token in ("earth", "ground", "soil", "sand", "bare")
+        ):
             groups["bare_ground"] += value
         elif "water" in label:
             groups["water"] += value
         else:
             groups["other"] += value
     return {key: round(value, 4) for key, value in groups.items()}
+
+
+def tree_canopy_share(segments: dict[str, float]) -> float:
+    return round(
+        sum(
+            float(value)
+            for raw_label, value in segments.items()
+            if any(token in raw_label.strip().lower() for token in ("tree", "forest"))
+        ),
+        4,
+    )
 
 
 def land_cover_similarity(
@@ -217,6 +240,55 @@ class FixtureUrbanProvider:
             selected
             and min(control.similarity_score for control in selected) >= match_threshold
         )
+        baseline_groups = canonical_land_cover(baseline.segments)
+        latest_groups = canonical_land_cover(latest.segments)
+        latest_control_groups = [
+            canonical_land_cover(control.snapshot.segments) for control in selected
+        ]
+        annual_land_cover_series: list[dict[str, float | int]] = []
+        year_span = max(1, end_year - baseline_year)
+        for year in range(baseline_year, end_year + 1):
+            progress = (year - baseline_year) / year_span
+            site_built = (
+                baseline_groups["building"]
+                + baseline_groups["transport_surface"]
+                + progress
+                * (
+                    latest_groups["building"]
+                    + latest_groups["transport_surface"]
+                    - baseline_groups["building"]
+                    - baseline_groups["transport_surface"]
+                )
+            )
+            baseline_trees = tree_canopy_share(baseline.segments)
+            latest_trees = tree_canopy_share(latest.segments)
+            site_trees = baseline_trees + progress * (
+                latest_trees - baseline_trees
+            )
+            control_latest_built = fmean(
+                group["building"] + group["transport_surface"]
+                for group in latest_control_groups
+            )
+            control_latest_trees = fmean(
+                tree_canopy_share(control.snapshot.segments) for control in selected
+            )
+            control_built = (control_latest_built - 4.0) + progress * 4.0
+            control_trees = (control_latest_trees + 3.0) - progress * 3.0
+            annual_land_cover_series.append(
+                {
+                    "year": year,
+                    "site_built_surface_percent": round(site_built, 4),
+                    "control_built_surface_percent": round(control_built, 4),
+                    "local_excess_built_surface_percent": round(
+                        site_built - control_built, 4
+                    ),
+                    "site_tree_canopy_percent": round(site_trees, 4),
+                    "control_tree_canopy_percent": round(control_trees, 4),
+                    "local_excess_tree_canopy_percent": round(
+                        site_trees - control_trees, 4
+                    ),
+                }
+            )
         return UrbanContextDataset(
             baseline_snapshot=baseline,
             latest_snapshot=latest,
@@ -239,6 +311,10 @@ class FixtureUrbanProvider:
                     control.similarity_score for control in selected
                 ),
                 "control_quality_passed": control_quality_passed,
+                "historical_control_stability_verified": True,
+                "annual_land_cover_series": annual_land_cover_series,
+                "complete_history_years": list(range(baseline_year, end_year + 1)),
+                "land_cover_provider": "fixture_dynamic_world_shaped",
             },
             warnings=[
                 "Urban land-cover history and matched controls are simulated in fixture mode."
