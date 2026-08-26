@@ -6,10 +6,12 @@ from .context import RunContext
 from .modeling import train_and_backtest
 from .models import AnalysisMode, Chart, DataClass, EvidenceRef, TelemetrySource
 from .providers.fixture import ThermalDataProvider
+from .providers.urban import UrbanContextProvider
 from .simulation import enrich_uploaded_bms, make_forecast_operating_frame, simulate_bms
 from .telemetry import TelemetryStore
 from .tools import (
     analyze_thermal_drift,
+    analyze_urban_context,
     apply_demo_defaults,
     calculate_investment_impact,
     optimize_operations,
@@ -25,7 +27,14 @@ class PlanningAgent:
         modes = set(context.request.analysis_modes)
         plan = ["validate_request"]
         if AnalysisMode.THERMAL_DRIFT in modes or AnalysisMode.INVESTMENT in modes:
-            plan.extend(["retrieve_annual_thermal_history", "calculate_thermal_drift"])
+            plan.extend(
+                [
+                    "retrieve_satellite_land_cover",
+                    "select_regional_controls",
+                    "retrieve_annual_thermal_history",
+                    "calculate_thermal_drift",
+                ]
+            )
         if AnalysisMode.OPERATIONS_12H in modes:
             plan.extend(
                 [
@@ -61,13 +70,47 @@ class TemperatureIntelligenceAgent:
             2026,
             context.request.temperature_eligibility_threshold_c,
             seed=context.request.simulation.seed,
+            controls=context.artifacts.get("matched_control_sites"),
         )
         context.warnings.extend(annual.warnings)
         analyze_thermal_drift(context, annual)
 
 
+class UrbanChangeAgent:
+    def __init__(self, provider: UrbanContextProvider) -> None:
+        self.provider = provider
+
+    async def run(self, context: RunContext) -> None:
+        modes = set(context.request.analysis_modes)
+        if not ({AnalysisMode.THERMAL_DRIFT, AnalysisMode.INVESTMENT} & modes):
+            return
+        try:
+            urban = await self.provider.analyze(
+                context.request.site,
+                context.request.baseline_year,
+                2026,
+                seed=context.request.simulation.seed,
+            )
+        except Exception as exc:
+            context.warnings.append(
+                "Satellite context was unavailable; thermal drift continues with the "
+                f"provider's local control method ({type(exc).__name__})."
+            )
+            context.event(
+                "urban_change_agent",
+                "Could not retrieve satellite context or select regional controls",
+                status="unavailable",
+                details={"error_type": type(exc).__name__},
+            )
+            return
+        context.warnings.extend(urban.warnings)
+        analyze_urban_context(context, urban)
+
+
 class AssetModelingAgent:
-    def __init__(self, provider: ThermalDataProvider, telemetry_store: TelemetryStore) -> None:
+    def __init__(
+        self, provider: ThermalDataProvider, telemetry_store: TelemetryStore
+    ) -> None:
         self.provider = provider
         self.telemetry_store = telemetry_store
 
@@ -92,7 +135,9 @@ class AssetModelingAgent:
         uploaded = None
         if context.request.telemetry.source == TelemetrySource.UPLOADED:
             try:
-                uploaded = self.telemetry_store.get(str(context.request.telemetry.upload_id))
+                uploaded = self.telemetry_store.get(
+                    str(context.request.telemetry.upload_id)
+                )
             except KeyError:
                 context.warnings.append("Uploaded telemetry was not found or expired")
                 context.event(
@@ -102,10 +147,14 @@ class AssetModelingAgent:
                 )
                 return
             reference_start = uploaded["timestamp"].min().to_pydatetime()
-            reference_end = uploaded["timestamp"].max().to_pydatetime() + timedelta(hours=1)
+            reference_end = uploaded["timestamp"].max().to_pydatetime() + timedelta(
+                hours=1
+            )
         else:
             reference_end = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
-            reference_start = reference_end - timedelta(days=context.request.simulation.history_days)
+            reference_start = reference_end - timedelta(
+                days=context.request.simulation.history_days
+            )
         history_thermal = await self.provider.history(
             context.request.site,
             reference_start,
@@ -126,7 +175,9 @@ class AssetModelingAgent:
                 description="Historical thermal inputs used to train the facility digital twin",
                 data_class=history_thermal.data_class,
                 activity_id=(
-                    history_thermal.activity_ids[0] if history_thermal.activity_ids else None
+                    history_thermal.activity_ids[0]
+                    if history_thermal.activity_ids
+                    else None
                 ),
                 metadata={
                     "history_hours": len(history_thermal.samples),
@@ -138,7 +189,7 @@ class AssetModelingAgent:
             EvidenceRef(
                 id=f"forecast-weather-{context.run_id}",
                 source=forecast_thermal.source,
-                description="Forecast site and matched-control outdoor thermal conditions",
+                description="Forecast site and local-ring outdoor thermal conditions",
                 data_class=forecast_thermal.data_class,
                 activity_id=(
                     forecast_thermal.activity_ids[0]
@@ -161,7 +212,7 @@ class AssetModelingAgent:
         context.charts.append(
             Chart(
                 id="temperature_forecast_12h",
-                title="12-hour site and matched-control temperature timeline",
+                title="12-hour site and local-ring temperature timeline",
                 kind="line",
                 data=[
                     {
@@ -183,7 +234,9 @@ class AssetModelingAgent:
                     kind="geojson",
                     data=[
                         {
-                            "timestamp": forecast_thermal.samples[0].timestamp.isoformat(),
+                            "timestamp": forecast_thermal.samples[
+                                0
+                            ].timestamp.isoformat(),
                             "feature_collection": forecast_thermal.heatmap,
                         }
                     ],
@@ -193,11 +246,15 @@ class AssetModelingAgent:
             )
         if uploaded is None:
             history = simulate_bms(
-                history_thermal, context.request.facility, seed=context.request.simulation.seed + 10
+                history_thermal,
+                context.request.facility,
+                seed=context.request.simulation.seed + 10,
             )
             telemetry_data_class = DataClass.SIMULATED
             bms_source = "fortycool://simulator/data-center-digital-twin/v1"
-            bms_description = "Reproducible simulated BMS telemetry driven by thermal inputs"
+            bms_description = (
+                "Reproducible simulated BMS telemetry driven by thermal inputs"
+            )
         else:
             history, enrichment_warnings = enrich_uploaded_bms(
                 uploaded, history_thermal, context.request.facility
@@ -205,7 +262,9 @@ class AssetModelingAgent:
             context.warnings.extend(enrichment_warnings)
             telemetry_data_class = DataClass.UPLOADED
             bms_source = f"upload://{context.request.telemetry.upload_id}"
-            bms_description = "Validated user-uploaded BMS telemetry enriched with thermal inputs"
+            bms_description = (
+                "Validated user-uploaded BMS telemetry enriched with thermal inputs"
+            )
         forecast = make_forecast_operating_frame(
             forecast_thermal,
             context.request.facility,
@@ -269,7 +328,10 @@ class EvidenceAndSafetyAgent:
             elif any(item not in evidence_ids for item in metric.evidence_ids):
                 missing.append(metric.id)
         for recommendation in context.recommendations:
-            if recommendation.action != "hold_current_settings" and not recommendation.evidence_ids:
+            if (
+                recommendation.action != "hold_current_settings"
+                and not recommendation.evidence_ids
+            ):
                 missing.append(recommendation.id)
             elif any(item not in evidence_ids for item in recommendation.evidence_ids):
                 missing.append(recommendation.id)

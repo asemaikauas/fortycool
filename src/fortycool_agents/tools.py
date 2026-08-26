@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from statistics import fmean
 from typing import Any
 
 import numpy as np
@@ -20,6 +21,7 @@ from .models import (
     SafetyVerdict,
 )
 from .providers.fixture import AnnualThermalDataset
+from .providers.urban import UrbanContextDataset, canonical_land_cover
 from .simulation import resolve_facility_parameters
 
 
@@ -89,27 +91,313 @@ def register_facility_assumptions(context: RunContext) -> None:
         )
 
 
+def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> None:
+    latest = urban.latest_snapshot
+    latest_groups = canonical_land_cover(latest.segments)
+    baseline = urban.baseline_snapshot
+    historical_change_available = bool(
+        urban.metadata.get("historical_change_available") and baseline is not None
+    )
+    control_quality_passed = bool(urban.metadata.get("control_quality_passed"))
+    satellite_evidence_id = context.add_evidence(
+        EvidenceRef(
+            id=f"satellite-land-cover-{context.run_id}",
+            source=urban.source,
+            description=(
+                "Satellite segmentation for the site and regional control candidates"
+            ),
+            data_class=urban.data_class,
+            activity_id=urban.activity_ids[0] if urban.activity_ids else None,
+            endpoint=(
+                "/v1/satellite" if urban.data_class == DataClass.OBSERVED else None
+            ),
+            metadata={
+                "activity_ids": urban.activity_ids,
+                "site_requested_dates": [
+                    snapshot.requested_date
+                    for snapshot in (baseline, latest)
+                    if snapshot is not None
+                ],
+                "site_image_years": [
+                    snapshot.image_year
+                    for snapshot in (baseline, latest)
+                    if snapshot is not None
+                ],
+                "latest_site_segments": latest.segments,
+                **urban.metadata,
+            },
+        )
+    )
+    control_evidence_id = context.add_evidence(
+        EvidenceRef(
+            id=f"control-matching-{context.run_id}",
+            source="fortycool://analytics/land-cover-control-matching/v1",
+            description="Regional control selection by satellite land-cover similarity",
+            data_class=DataClass.INFERRED,
+            metadata={
+                "formula": "1 - L1(canonical_land_cover_site, candidate) / 200",
+                "evaluated_controls": [
+                    {
+                        "name": control.site.name,
+                        "latitude": control.site.latitude,
+                        "longitude": control.site.longitude,
+                        "similarity_score": control.similarity_score,
+                        "distance_km": control.distance_km,
+                        "activity_id": control.snapshot.activity_id,
+                        "image_year": control.snapshot.image_year,
+                    }
+                    for control in urban.matched_controls
+                ],
+            },
+        )
+    )
+    context.metrics.extend(
+        [
+            Metric(
+                id="current_built_surface_share_percent",
+                label="Current built-surface share",
+                value=round(
+                    latest_groups["building"] + latest_groups["transport_surface"], 3
+                ),
+                unit="%",
+                confidence=0.9 if urban.data_class == DataClass.OBSERVED else 0.7,
+                data_class=urban.data_class,
+                evidence_ids=[satellite_evidence_id],
+                caveats=[
+                    "Built surface combines segmentation classes for buildings and transport surfaces"
+                ],
+            ),
+            Metric(
+                id="current_tree_canopy_share_percent",
+                label="Current tree-canopy share",
+                value=round(latest_groups["vegetation"], 3),
+                unit="%",
+                confidence=0.9 if urban.data_class == DataClass.OBSERVED else 0.7,
+                data_class=urban.data_class,
+                evidence_ids=[satellite_evidence_id],
+            ),
+            Metric(
+                id="regional_control_match_score",
+                label="Mean regional-control land-cover match",
+                value=round(
+                    fmean(
+                        control.similarity_score for control in urban.matched_controls
+                    ),
+                    3,
+                ),
+                unit="score",
+                confidence=0.78 if urban.data_class == DataClass.OBSERVED else 0.65,
+                data_class=DataClass.INFERRED,
+                evidence_ids=[satellite_evidence_id, control_evidence_id],
+                caveats=[
+                    "Similarity is based on current imagery and does not establish historical stability"
+                ],
+            ),
+            Metric(
+                id="regional_control_match_status",
+                label="Regional-control quality gate",
+                value="accepted" if control_quality_passed else "rejected",
+                unit="status",
+                confidence=1.0,
+                data_class=DataClass.INFERRED,
+                evidence_ids=[satellite_evidence_id, control_evidence_id],
+                caveats=(
+                    []
+                    if control_quality_passed
+                    else [
+                        "Thermal drift uses the local outer ring because regional candidates failed the similarity threshold"
+                    ]
+                ),
+            ),
+        ]
+    )
+    if historical_change_available and baseline is not None:
+        baseline_groups = canonical_land_cover(baseline.segments)
+        context.metrics.extend(
+            [
+                Metric(
+                    id="built_surface_change_percentage_points",
+                    label="Built-surface change",
+                    value=round(
+                        (latest_groups["building"] + latest_groups["transport_surface"])
+                        - (
+                            baseline_groups["building"]
+                            + baseline_groups["transport_surface"]
+                        ),
+                        3,
+                    ),
+                    unit="percentage points",
+                    confidence=0.8 if urban.data_class == DataClass.OBSERVED else 0.65,
+                    data_class=DataClass.INFERRED,
+                    evidence_ids=[satellite_evidence_id],
+                ),
+                Metric(
+                    id="tree_canopy_change_percentage_points",
+                    label="Tree-canopy change",
+                    value=round(
+                        latest_groups["vegetation"] - baseline_groups["vegetation"], 3
+                    ),
+                    unit="percentage points",
+                    confidence=0.8 if urban.data_class == DataClass.OBSERVED else 0.65,
+                    data_class=DataClass.INFERRED,
+                    evidence_ids=[satellite_evidence_id],
+                ),
+            ]
+        )
+    else:
+        context.metrics.append(
+            Metric(
+                id="satellite_change_status",
+                label="Historical satellite change status",
+                value="not_available",
+                unit="status",
+                confidence=1.0,
+                data_class=DataClass.OBSERVED,
+                evidence_ids=[satellite_evidence_id],
+                caveats=[
+                    "Baseline and latest requests resolved to the same image year; no change was calculated"
+                ],
+            )
+        )
+
+    snapshots = [latest, *(control.snapshot for control in urban.matched_controls)]
+    control_scores = {
+        control.snapshot.label: control.similarity_score
+        for control in urban.matched_controls
+    }
+    context.charts.append(
+        Chart(
+            id="satellite_land_cover_context",
+            title=(
+                "FortyGuard satellite land cover: site and matched controls"
+                if control_quality_passed
+                else "FortyGuard satellite land cover: site and rejected candidates"
+            ),
+            kind="stacked_bar",
+            data=[
+                {
+                    "location": snapshot.label,
+                    "role": (
+                        "site"
+                        if snapshot is latest
+                        else (
+                            "matched_control"
+                            if control_quality_passed
+                            else "rejected_control_candidate"
+                        )
+                    ),
+                    "image_year": snapshot.image_year,
+                    "similarity_score": control_scores.get(snapshot.label, 1.0),
+                    **canonical_land_cover(snapshot.segments),
+                }
+                for snapshot in snapshots
+            ],
+            data_class=urban.data_class,
+            evidence_ids=[satellite_evidence_id, control_evidence_id],
+        )
+    )
+    context.charts.append(
+        Chart(
+            id="regional_control_map",
+            title=(
+                "Satellite-matched regional control locations"
+                if control_quality_passed
+                else "Rejected regional control candidates"
+            ),
+            kind="point_map",
+            data=[
+                {
+                    "location": latest.label,
+                    "role": "site",
+                    "latitude": latest.latitude,
+                    "longitude": latest.longitude,
+                    "similarity_score": 1.0,
+                },
+                *[
+                    {
+                        "location": control.snapshot.label,
+                        "role": (
+                            "matched_control"
+                            if control_quality_passed
+                            else "rejected_control_candidate"
+                        ),
+                        "latitude": control.site.latitude,
+                        "longitude": control.site.longitude,
+                        "similarity_score": control.similarity_score,
+                    }
+                    for control in urban.matched_controls
+                ],
+            ],
+            data_class=DataClass.INFERRED,
+            evidence_ids=[satellite_evidence_id, control_evidence_id],
+        )
+    )
+    context.artifacts["matched_control_sites"] = (
+        [control.site for control in urban.matched_controls]
+        if control_quality_passed
+        else []
+    )
+    context.artifacts["historical_satellite_change_available"] = (
+        historical_change_available
+    )
+    context.event(
+        "urban_change_agent",
+        (
+            (
+                f"Selected {len(urban.matched_controls)} regional controls from "
+                f"{len(urban.candidate_snapshots)} satellite candidates"
+            )
+            if control_quality_passed
+            else (
+                f"Rejected {len(urban.matched_controls)} regional control candidates "
+                "that failed the land-cover quality gate"
+            )
+        ),
+        evidence_ids=[satellite_evidence_id, control_evidence_id],
+        details={
+            "historical_change_available": historical_change_available,
+            "site_image_year": latest.image_year,
+            "control_quality_passed": control_quality_passed,
+        },
+    )
+
+
 def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> None:
     rows = annual.summaries
     if len(rows) < 2:
-        raise ValueError("thermal drift analysis requires at least two annual observations")
+        raise ValueError(
+            "thermal drift analysis requires at least two annual observations"
+        )
     years = np.array([item.year for item in rows], dtype=float)
     gaps = np.array(
-        [item.site_mean_temperature_c - item.control_mean_temperature_c for item in rows]
+        [
+            item.site_mean_temperature_c - item.control_mean_temperature_c
+            for item in rows
+        ]
     )
     eligibility_gaps = np.array(
-        [item.site_eligible_hours - item.control_eligible_hours for item in rows], dtype=float
+        [item.site_eligible_hours - item.control_eligible_hours for item in rows],
+        dtype=float,
     )
     slope = float(np.polyfit(years - years[0], gaps, 1)[0])
     latest_local_drift = float(gaps[-1] - gaps[0])
     lost_eligible_hours = max(0, round(eligibility_gaps[0] - eligibility_gaps[-1]))
-    confidence = 0.84 if annual.data_class == DataClass.OBSERVED else 0.72
+    if annual.data_class == DataClass.OBSERVED:
+        confidence = 0.84
+    elif (
+        annual.data_class != DataClass.SIMULATED
+        and annual.metadata.get("control_method")
+        == "satellite_land_cover_matched_regional"
+    ):
+        confidence = 0.77
+    else:
+        confidence = 0.72
 
     evidence_id = context.add_evidence(
         EvidenceRef(
             id=f"thermal-{context.run_id}",
             source=annual.source,
-            description="Site and matched-control historical temperature summaries",
+            description="Site and disclosed-control historical temperature summaries",
             data_class=annual.data_class,
             activity_id=annual.activity_ids[0] if annual.activity_ids else None,
             endpoint=("/v1/heatmap" if annual.metadata.get("observed_years") else None),
@@ -126,9 +414,11 @@ def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> 
         EvidenceRef(
             id=f"did-{context.run_id}",
             source="fortycool://analytics/difference-in-differences/v1",
-            description="Difference-in-differences calculation against matched controls",
+            description="Difference-in-differences calculation against disclosed controls",
             data_class=DataClass.INFERRED,
-            metadata={"formula": "(site_latest-site_baseline)-(control_latest-control_baseline)"},
+            metadata={
+                "formula": "(site_latest-site_baseline)-(control_latest-control_baseline)"
+            },
         )
     )
     context.metrics.extend(
@@ -168,7 +458,7 @@ def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> 
     context.charts.append(
         Chart(
             id="thermal_drift_timeseries",
-            title="Site temperature versus matched control",
+            title="Site temperature versus disclosed control",
             kind="line",
             data=[
                 {
@@ -176,7 +466,8 @@ def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> 
                     "site_mean_temperature_c": item.site_mean_temperature_c,
                     "control_mean_temperature_c": item.control_mean_temperature_c,
                     "site_control_gap_c": round(
-                        item.site_mean_temperature_c - item.control_mean_temperature_c, 3
+                        item.site_mean_temperature_c - item.control_mean_temperature_c,
+                        3,
                     ),
                     "site_eligible_hours": item.site_eligible_hours,
                     "control_eligible_hours": item.control_eligible_hours,
@@ -191,8 +482,11 @@ def analyze_thermal_drift(context: RunContext, annual: AnnualThermalDataset) -> 
     context.artifacts["temperature_eligible_hours_lost"] = lost_eligible_hours
     context.event(
         "temperature_intelligence_agent",
-        f"Compared {len(rows)} annual site observations with matched controls",
+        f"Compared {len(rows)} annual site observations with disclosed controls",
         evidence_ids=[evidence_id, calc_id],
+        details={
+            "control_method": annual.metadata.get("control_method", "unspecified")
+        },
     )
 
 
@@ -337,7 +631,9 @@ def optimize_operations(
                 verdict=SafetyVerdict.INSUFFICIENT_DATA,
             )
         )
-        context.warnings.append("Operational recommendation withheld: safety constraints are incomplete")
+        context.warnings.append(
+            "Operational recommendation withheld: safety constraints are incomplete"
+        )
         context.event(
             "evidence_and_safety_agent",
             "Withheld operating recommendation because constraints are incomplete",
@@ -377,9 +673,9 @@ def optimize_operations(
                     <= float(constraints.supply_air_setpoint_max_c)
                 ):
                     rejection_reasons.append("supply_air_setpoint_range")
-                available_limit = float(constraints.maximum_server_inlet_temperature_c) - float(
-                    constraints.minimum_safety_margin_c
-                )
+                available_limit = float(
+                    constraints.maximum_server_inlet_temperature_c
+                ) - float(constraints.minimum_safety_margin_c)
                 if max_inlet > available_limit:
                     rejection_reasons.append("server_inlet_safety_margin")
                 if bundle.confidence < float(constraints.minimum_model_confidence):
@@ -432,7 +728,9 @@ def optimize_operations(
         )
         return
 
-    best = min(safe_candidates, key=lambda candidate: (candidate.energy_kwh, candidate.peak_kw))
+    best = min(
+        safe_candidates, key=lambda candidate: (candidate.energy_kwh, candidate.peak_kw)
+    )
     savings = max(0.0, baseline_energy - best.energy_kwh)
     peak_reduction = max(0.0, baseline_peak - best.peak_kw)
     margin = float(constraints.maximum_server_inlet_temperature_c) - best.max_inlet_c
@@ -543,7 +841,12 @@ def calculate_investment_impact(context: RunContext) -> None:
     discount = economics.discount_rate
     if context.request.use_demo_defaults:
         defaults: list[tuple[str, Any, Any, str]] = [
-            ("electricity_price_per_kwh", price, 0.09, "Illustrative electricity price"),
+            (
+                "electricity_price_per_kwh",
+                price,
+                0.09,
+                "Illustrative electricity price",
+            ),
             ("horizon_years", horizon, 10, "Illustrative investment horizon"),
             ("discount_rate", discount, 0.08, "Illustrative discount rate"),
         ]
@@ -557,7 +860,9 @@ def calculate_investment_impact(context: RunContext) -> None:
         horizon = economics.horizon_years
         discount = economics.discount_rate
     if price is None or horizon is None or discount is None:
-        context.warnings.append("Financial impact omitted: tariff, horizon, or discount rate is missing")
+        context.warnings.append(
+            "Financial impact omitted: tariff, horizon, or discount rate is missing"
+        )
         return
 
     facility = resolve_facility_parameters(context.request.facility)

@@ -54,7 +54,9 @@ class ThermalDataProvider(Protocol):
         self, site: SiteInput, start: datetime, end: datetime, *, seed: int
     ) -> ThermalDataset: ...
 
-    async def forecast(self, site: SiteInput, hours: int, *, seed: int) -> ThermalDataset: ...
+    async def forecast(
+        self, site: SiteInput, hours: int, *, seed: int
+    ) -> ThermalDataset: ...
 
     async def annual_history(
         self,
@@ -64,6 +66,7 @@ class ThermalDataProvider(Protocol):
         threshold_c: float,
         *,
         seed: int,
+        controls: list[SiteInput] | None = None,
     ) -> AnnualThermalDataset: ...
 
 
@@ -77,7 +80,9 @@ class FixtureThermalProvider:
     source = "fixture://fortyguard-shaped-thermal-series/v1"
 
     @staticmethod
-    def _temperature(site: SiteInput, timestamp: datetime, rng: random.Random) -> ThermalSample:
+    def _temperature(
+        site: SiteInput, timestamp: datetime, rng: random.Random
+    ) -> ThermalSample:
         day = timestamp.timetuple().tm_yday
         hour = timestamp.hour + timestamp.minute / 60
         latitude_adjustment = -0.38 * (site.latitude - 32.0)
@@ -92,7 +97,9 @@ class FixtureThermalProvider:
         control = regional + control_drift + weather_noise
         site_temp = control + 0.65 + local_excess_drift + rng.gauss(0, 0.18)
 
-        humidity = min(96.0, max(22.0, 63.0 - 1.25 * (site_temp - 20) + rng.gauss(0, 4)))
+        humidity = min(
+            96.0, max(22.0, 63.0 - 1.25 * (site_temp - 20) + rng.gauss(0, 4))
+        )
         wet_bulb = site_temp - max(1.0, (100.0 - humidity) / 7.2)
         daylight = max(0.0, math.sin(math.pi * (hour - 6) / 14))
         solar = daylight * 820.0 * max(0.35, 1 - humidity / 180)
@@ -109,7 +116,9 @@ class FixtureThermalProvider:
         self, site: SiteInput, start: datetime, end: datetime, *, seed: int
     ) -> ThermalDataset:
         rng = random.Random(seed)
-        cursor = start.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        cursor = start.astimezone(timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        )
         stop = end.astimezone(timezone.utc)
         samples: list[ThermalSample] = []
         while cursor < stop:
@@ -122,10 +131,14 @@ class FixtureThermalProvider:
             activity_ids=[f"fixture-history-{seed}"],
         )
 
-    async def forecast(self, site: SiteInput, hours: int, *, seed: int) -> ThermalDataset:
+    async def forecast(
+        self, site: SiteInput, hours: int, *, seed: int
+    ) -> ThermalDataset:
         # A fixed reference instant keeps fixture-mode snapshots reproducible.
         start = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
-        dataset = await self.history(site, start, start + timedelta(hours=hours), seed=seed + 1000)
+        dataset = await self.history(
+            site, start, start + timedelta(hours=hours), seed=seed + 1000
+        )
         return ThermalDataset(
             samples=dataset.samples,
             data_class=dataset.data_class,
@@ -141,7 +154,9 @@ class FixtureThermalProvider:
         threshold_c: float,
         *,
         seed: int,
+        controls: list[SiteInput] | None = None,
     ) -> AnnualThermalDataset:
+        controls = controls or []
         rng = random.Random(seed + 2000)
         summaries: list[AnnualThermalSummary] = []
         for year in range(baseline_year, end_year + 1):
@@ -153,7 +168,9 @@ class FixtureThermalProvider:
 
             # Eligibility here means temperature-only hours below the threshold.
             threshold_offset = (threshold_c - 18.0) * 105
-            control_hours = round(4520 + threshold_offset - regional_trend * 230 + rng.gauss(0, 18))
+            control_hours = round(
+                4520 + threshold_offset - regional_trend * 230 + rng.gauss(0, 18)
+            )
             site_hours = round(
                 control_hours - 155 - local_excess * 245 + rng.gauss(0, 10)
             )
@@ -171,4 +188,12 @@ class FixtureThermalProvider:
             data_class=DataClass.SIMULATED,
             source=self.source,
             activity_ids=[f"fixture-annual-{seed}"],
+            metadata={
+                "control_method": (
+                    "satellite_land_cover_matched_regional"
+                    if controls
+                    else "fixture_regional_control"
+                ),
+                "control_sites": [control.model_dump() for control in controls],
+            },
         )

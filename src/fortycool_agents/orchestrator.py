@@ -10,6 +10,7 @@ from .agents import (
     InvestmentAnalystAgent,
     PlanningAgent,
     TemperatureIntelligenceAgent,
+    UrbanChangeAgent,
 )
 from .context import RunContext
 from .models import (
@@ -20,8 +21,9 @@ from .models import (
     SafetyVerdict,
     TraceEvent,
 )
-from .providers import build_thermal_provider
+from .providers import build_thermal_provider, build_urban_provider
 from .providers.fixture import ThermalDataProvider
+from .providers.urban import UrbanContextProvider
 from .telemetry import TelemetryStore
 
 
@@ -29,11 +31,16 @@ class FortyCoolOrchestrator:
     def __init__(
         self,
         provider: ThermalDataProvider | None = None,
+        urban_provider: UrbanContextProvider | None = None,
         telemetry_store: TelemetryStore | None = None,
     ) -> None:
         self.provider = provider or build_thermal_provider()
+        self.urban_provider = urban_provider or build_urban_provider(
+            thermal_provider=self.provider
+        )
         self.telemetry_store = telemetry_store or TelemetryStore()
         self.planner = PlanningAgent()
+        self.urban_agent = UrbanChangeAgent(self.urban_provider)
         self.temperature_agent = TemperatureIntelligenceAgent(self.provider)
         self.asset_agent = AssetModelingAgent(self.provider, self.telemetry_store)
         self.decision_agent = DecisionAgent()
@@ -53,6 +60,7 @@ class FortyCoolOrchestrator:
             event_sink=event_sink,
         )
         self.planner.plan(context)
+        await self.urban_agent.run(context)
         await self.temperature_agent.run(context)
         await self.asset_agent.run(context)
         await self.decision_agent.run(context)
@@ -62,7 +70,9 @@ class FortyCoolOrchestrator:
 
     @staticmethod
     def _response(context: RunContext) -> AnalysisResponse:
-        evidence_failure = any("Evidence verification failed" in item for item in context.warnings)
+        evidence_failure = any(
+            "Evidence verification failed" in item for item in context.warnings
+        )
         incomplete = any(
             recommendation.verdict == SafetyVerdict.INSUFFICIENT_DATA
             for recommendation in context.recommendations
@@ -88,6 +98,7 @@ class FortyCoolOrchestrator:
 
         metric_map = {metric.id: metric for metric in context.metrics}
         drift = metric_map.get("local_thermal_drift_c")
+        built_change = metric_map.get("built_surface_change_percentage_points")
         npv = metric_map.get("thermal_drift_npv")
         recommendation = next(
             (
@@ -99,7 +110,13 @@ class FortyCoolOrchestrator:
         )
         summary_parts: list[str] = []
         if drift:
-            summary_parts.append(f"Local thermal drift is {drift.value}{drift.unit} versus control")
+            summary_parts.append(
+                f"Local thermal drift is {drift.value}{drift.unit} versus control"
+            )
+        if built_change:
+            summary_parts.append(
+                f"built surface changed by {built_change.value} {built_change.unit}"
+            )
         if npv:
             summary_parts.append(f"indicative exposure is {npv.value} {npv.unit}")
         if recommendation:
@@ -107,7 +124,9 @@ class FortyCoolOrchestrator:
                 f"the advisory 12-hour plan saves {recommendation.expected_savings_kwh:.1f} kWh"
             )
         if not summary_parts:
-            summary_parts.append("The requested workflow did not produce a decision-ready result")
+            summary_parts.append(
+                "The requested workflow did not produce a decision-ready result"
+            )
         summary = "; ".join(summary_parts) + "."
 
         return AnalysisResponse(

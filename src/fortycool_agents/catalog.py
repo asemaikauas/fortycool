@@ -32,9 +32,23 @@ TOOL_CATALOG = [
         invocation_path="/agent-tools/investment",
     ),
     ToolDefinition(
+        name="get_satellite_land_cover",
+        owner="urban_change_agent",
+        description=(
+            "Retrieve FortyGuard satellite segmentation for the site and control candidates."
+        ),
+        invocation_path=None,
+    ),
+    ToolDefinition(
+        name="select_regional_controls",
+        owner="urban_change_agent",
+        description="Select regional controls by current land-cover similarity.",
+        invocation_path=None,
+    ),
+    ToolDefinition(
         name="get_site_thermal_history",
         owner="temperature_intelligence_agent",
-        description="Retrieve annual site and matched-control thermal summaries.",
+        description="Retrieve annual site and disclosed-control thermal summaries.",
         invocation_path=None,
     ),
     ToolDefinition(

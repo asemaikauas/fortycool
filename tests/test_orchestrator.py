@@ -41,11 +41,16 @@ def test_full_demo_produces_evidence_backed_outputs() -> None:
     assert response.status == RunStatus.COMPLETED_WITH_WARNINGS
     assert response.confidence_tier == ConfidenceTier.INDICATIVE
     assert {chart.id for chart in response.charts} >= {
+        "satellite_land_cover_context",
+        "regional_control_map",
         "thermal_drift_timeseries",
         "historical_day_backtest",
         "baseline_vs_optimized",
     }
     assert {metric.id for metric in response.metrics} >= {
+        "current_built_surface_share_percent",
+        "built_surface_change_percentage_points",
+        "regional_control_match_score",
         "local_thermal_drift_c",
         "forecast_savings_kwh",
         "thermal_drift_npv",
@@ -99,5 +104,7 @@ def test_planner_only_selects_requested_workflows() -> None:
     planner = response.trace[0]
 
     assert "calculate_thermal_drift" in planner.details["steps"]
+    assert "retrieve_satellite_land_cover" in planner.details["steps"]
+    assert "select_regional_controls" in planner.details["steps"]
     assert "simulate_or_ingest_bms" not in planner.details["steps"]
     assert not response.recommendations

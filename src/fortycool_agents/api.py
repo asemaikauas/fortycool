@@ -37,6 +37,7 @@ async def health() -> dict[str, str]:
     return {
         "status": "ok",
         "thermal_provider": type(orchestrator.provider).__name__,
+        "urban_provider": type(orchestrator.urban_provider).__name__,
         "copilot": "configured" if copilot_service.configured else "not_configured",
         "copilot_model": copilot_service.model,
     }

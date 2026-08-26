@@ -45,7 +45,9 @@ class FortyGuardClient:
     @staticmethod
     def _cache_key(endpoint: str, payload: dict[str, Any]) -> str:
         canonical = json.dumps(
-            {"endpoint": endpoint, "payload": payload}, sort_keys=True, separators=(",", ":")
+            {"endpoint": endpoint, "payload": payload},
+            sort_keys=True,
+            separators=(",", ":"),
         )
         return hashlib.sha256(canonical.encode()).hexdigest()
 
@@ -72,14 +74,18 @@ class FortyGuardClient:
         try:
             body = response.json()
         except ValueError as exc:
-            raise FortyGuardError(f"FortyGuard returned non-JSON status {response.status_code}") from exc
+            raise FortyGuardError(
+                f"FortyGuard returned non-JSON status {response.status_code}"
+            ) from exc
         if response.is_error or body.get("error"):
             raise FortyGuardError(
                 f"FortyGuard submission failed ({response.status_code}): {body.get('message', body)}"
             )
         activity_id = body.get("data", {}).get("activity_id")
         if not activity_id:
-            raise FortyGuardError("FortyGuard response did not contain data.activity_id")
+            raise FortyGuardError(
+                "FortyGuard response did not contain data.activity_id"
+            )
         return str(activity_id)
 
     async def status(self, activity_id: str) -> dict[str, Any]:
@@ -87,12 +93,15 @@ class FortyGuardClient:
             raise FortyGuardError("FORTYGUARD_API_KEY is not configured")
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.get(
-                f"{self.base_url}/status/{activity_id}", headers={"api-key": self.api_key}
+                f"{self.base_url}/status/{activity_id}",
+                headers={"api-key": self.api_key},
             )
         try:
             body = response.json()
         except ValueError as exc:
-            raise FortyGuardError(f"FortyGuard returned non-JSON status {response.status_code}") from exc
+            raise FortyGuardError(
+                f"FortyGuard returned non-JSON status {response.status_code}"
+            ) from exc
         if response.is_error or body.get("error"):
             raise FortyGuardError(
                 f"FortyGuard status failed ({response.status_code}): {body.get('message', body)}"
@@ -108,7 +117,9 @@ class FortyGuardClient:
             if state == "failed":
                 raise FortyGuardError(f"FortyGuard activity {activity_id} failed")
             await asyncio.sleep(self.poll_interval_seconds)
-        raise FortyGuardError(f"FortyGuard activity {activity_id} exceeded polling limit")
+        raise FortyGuardError(
+            f"FortyGuard activity {activity_id} exceeded polling limit"
+        )
 
     async def run(
         self, endpoint: str, payload: dict[str, Any], *, use_cache: bool = True
@@ -121,10 +132,19 @@ class FortyGuardClient:
         self._store_cache(key, result)
         return result
 
-    async def create_heatmap(self, payload: dict[str, Any], *, use_cache: bool = True) -> dict[str, Any]:
+    async def create_heatmap(
+        self, payload: dict[str, Any], *, use_cache: bool = True
+    ) -> dict[str, Any]:
         return await self.run("heatmap", payload, use_cache=use_cache)
 
     async def environmental_parameters(
         self, payload: dict[str, Any], *, use_cache: bool = True
     ) -> dict[str, Any]:
         return await self.run("env_params", payload, use_cache=use_cache)
+
+    async def satellite_segmentation(
+        self, payload: dict[str, Any], *, use_cache: bool = True
+    ) -> dict[str, Any]:
+        """Submit and retrieve a FortyGuard Satellite Segmentation activity."""
+
+        return await self.run("satellite", payload, use_cache=use_cache)

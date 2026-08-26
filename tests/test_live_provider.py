@@ -124,6 +124,83 @@ def test_historical_coverage_gap_becomes_calibrated_backcast() -> None:
     assert any("calibrated simulated backcasts" in warning for warning in result.warnings)
 
 
+def test_historical_heatmap_uses_three_equal_weight_regional_control_zones() -> None:
+    controls = [
+        SiteInput(
+            name=f"Control {index}",
+            latitude=latitude,
+            longitude=longitude,
+        )
+        for index, (latitude, longitude) in enumerate(
+            [(39.037, -77.46), (39.01, -77.425), (38.983, -77.46)], start=1
+        )
+    ]
+
+    class RegionalFakeClient(FakeFortyGuardClient):
+        async def create_heatmap(
+            self, payload: dict[str, Any], *, use_cache: bool = True
+        ) -> dict[str, Any]:
+            del use_cache
+            self.calls.append(payload)
+            year = int(payload["date_time"]["start_date"][:4])
+            analytic_type = payload.get("analytic_type", "tcm")
+            if analytic_type == "exceedance":
+                site_value = 500
+                control_values = [540, 550, 560]
+                value_key = "value"
+            else:
+                site_value = 26.0 + 0.2 * (year - 2021)
+                control_values = [
+                    25.0 + 0.1 * (year - 2021),
+                    25.2 + 0.1 * (year - 2021),
+                    24.8 + 0.1 * (year - 2021),
+                ]
+                value_key = "average_temperature"
+            features = [
+                polygon_feature(-77.46, 39.01, {value_key: site_value}),
+                *[
+                    polygon_feature(
+                        control.longitude,
+                        control.latitude,
+                        {value_key: value},
+                    )
+                    for control, value in zip(controls, control_values)
+                ],
+            ]
+            return {
+                "error": False,
+                "data": {
+                    "activity_id": f"regional-{year}-{analytic_type}",
+                    "status": "Completed",
+                    "result": {
+                        "map_data": {
+                            "type": "FeatureCollection",
+                            "features": features,
+                        },
+                        "stats_data": {},
+                    },
+                },
+            }
+
+    provider = FortyGuardThermalProvider(RegionalFakeClient())
+
+    result = asyncio.run(
+        provider.annual_history(site(), 2021, 2022, 18.0, seed=11, controls=controls)
+    )
+
+    assert result.metadata["control_method"] == (
+        "satellite_land_cover_matched_regional"
+    )
+    assert result.metadata["tile_counts"]["2022"]["control_zones"] == 3
+    assert result.metadata["tile_counts"]["2022"]["control_tiles_by_zone"] == [
+        1,
+        1,
+        1,
+    ]
+    assert result.summaries[1].control_mean_temperature_c == 25.1
+    assert len(result.metadata["control_sites"]) == 3
+
+
 def test_orchestrator_emits_live_map_timeline_and_split_provenance() -> None:
     provider = FortyGuardThermalProvider(
         FakeFortyGuardClient(),
