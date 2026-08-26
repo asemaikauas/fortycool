@@ -15,6 +15,7 @@ simulated unless the operator uploads facility telemetry.
 - Reproducible data-center BMS simulation driven by thermal conditions
 - Site-versus-control difference-in-differences and eligibility-hour analysis
 - Satellite land-cover context and regional-control matching
+- Two-stage public data-center discovery with an explicit no-winner outcome
 - Cooling-demand and inlet-temperature models with a held-out-day backtest
 - Constrained enumeration of 12-hour operating scenarios
 - Safety vetoes and an explicit `hold_current_settings` path
@@ -70,6 +71,9 @@ GET  /schemas/analysis-request
 GET  /schemas/analysis-response
 GET  /schemas/copilot-request
 GET  /schemas/copilot-response
+GET  /schemas/discovery-request
+GET  /schemas/discovery-response
+GET  /discovery/catalog
 POST /runs
 POST /run-jobs
 GET  /run-jobs/{run_id}
@@ -81,6 +85,7 @@ GET  /runs/{run_id}/evidence/{evidence_id}
 POST /agent-tools/thermal-drift
 POST /agent-tools/operations-12h
 POST /agent-tools/investment
+POST /agent-tools/site-discovery
 POST /telemetry/uploads
 GET  /telemetry/uploads/{upload_id}
 DELETE /telemetry/uploads/{upload_id}
@@ -225,6 +230,35 @@ Current imagery can support control matching, but it cannot prove that a control
 the historical window. The run includes this as a warning. Historical causal attribution remains a
 screening result until distinct dated imagery or another auditable historical land-cover source is
 available.
+
+### Public-site discovery
+
+`POST /agent-tools/site-discovery` is a two-stage discovery agent. With an empty JSON request it uses
+four publicly listed Northern Virginia facilities: Digital Realty ACC5, Digital Realty IAD24,
+Equinix DC14, and Digital Realty VA3. Operator names and addresses are linked to the operators'
+official facility pages; coordinates are geocodes of those reported addresses. Custom requests can
+supply one to twelve alternative candidates.
+
+The first stage makes only baseline and latest July `tcm` requests and calculates local
+difference-in-differences against a disclosed outer ring. By default, only sites at or above `0.10°C`
+are shortlisted. The second stage runs FortyGuard Satellite Segmentation, requires all three selected
+controls to clear the configured land-cover match threshold, and then runs the complete annual
+sequence against those controls using the existing July screening methodology. A site is a winner
+only if it clears every gate without a historical coverage backcast; this is multi-year screening,
+not a full-year utility-grade reconstruction.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/agent-tools/site-discovery \
+  -H 'Content-Type: application/json' \
+  -d '{}' | jq
+```
+
+Fixture mode demonstrates the complete positive path and clearly labels all thermal outputs as
+simulated. It currently selects ACC5 with a simulated `0.486°C` validated drift and `0.950` control
+match; these are not claims about Digital Realty. In the verified live screen, ACC5 measured
+`0.0069°C` and the other three candidates were effectively flat, so the correct live result is
+`no_qualified_candidate` and Satellite deep validation is not invoked. This negative result is an
+important integrity feature, not a hidden fallback.
 
 ## GPT-4o copilot
 

@@ -66,6 +66,11 @@ class CopilotAudience(str, Enum):
     TECHNICAL_REVIEWER = "technical_reviewer"
 
 
+class DiscoveryStatus(str, Enum):
+    QUALIFIED_CANDIDATE_FOUND = "qualified_candidate_found"
+    NO_QUALIFIED_CANDIDATE = "no_qualified_candidate"
+
+
 class SiteInput(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     latitude: float = Field(ge=-90, le=90)
@@ -291,3 +296,66 @@ class CopilotResponse(CopilotDraft):
     model: str
     response_id: str
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PublicSiteCandidate(BaseModel):
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_-]+$")
+    operator: str = Field(min_length=1, max_length=120)
+    address: str = Field(min_length=1, max_length=240)
+    site: SiteInput
+    operator_source_url: str = Field(pattern=r"^https://")
+    coordinate_source: str = Field(
+        default="OpenStreetMap Nominatim geocode of the public operator address",
+        min_length=1,
+        max_length=240,
+    )
+
+
+class DiscoveryRequest(BaseModel):
+    candidates: list[PublicSiteCandidate] | None = None
+    baseline_year: int = Field(default=2022, ge=2019, le=2026)
+    end_year: int = Field(default=2026, ge=2020, le=2026)
+    minimum_local_drift_c: float = Field(default=0.10, ge=0, le=5)
+    minimum_control_match_score: float = Field(default=0.65, ge=0, le=1)
+    shortlist_size: int = Field(default=1, ge=1, le=3)
+    temperature_eligibility_threshold_c: float = Field(default=18.0, ge=-30, le=50)
+    seed: int = 42
+
+    @model_validator(mode="after")
+    def validate_discovery_scope(self) -> "DiscoveryRequest":
+        if self.end_year <= self.baseline_year:
+            raise ValueError("end_year must be later than baseline_year")
+        if self.candidates is not None:
+            if not 1 <= len(self.candidates) <= 12:
+                raise ValueError("candidates must contain between 1 and 12 sites")
+            candidate_ids = [candidate.id for candidate in self.candidates]
+            if len(candidate_ids) != len(set(candidate_ids)):
+                raise ValueError("candidate IDs must be unique")
+        return self
+
+
+class DiscoveryCandidateResult(BaseModel):
+    candidate: PublicSiteCandidate
+    screening_local_drift_c: float
+    screening_data_class: DataClass
+    passed_drift_screen: bool
+    control_match_score: float | None = Field(default=None, ge=0, le=1)
+    control_match_status: str = "not_evaluated"
+    validated_local_drift_c: float | None = None
+    full_history_years: list[int] = Field(default_factory=list)
+    qualified: bool = False
+    rejection_reasons: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class DiscoveryResponse(BaseModel):
+    discovery_id: str
+    status: DiscoveryStatus
+    summary: str
+    winner: DiscoveryCandidateResult | None = None
+    candidates: list[DiscoveryCandidateResult]
+    charts: list[Chart] = Field(default_factory=list)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    trace: list[TraceEvent] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    disclaimer: str

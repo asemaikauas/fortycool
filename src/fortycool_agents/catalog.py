@@ -14,6 +14,14 @@ class ToolDefinition:
 
 TOOL_CATALOG = [
     ToolDefinition(
+        name="discover_thermal_drift_site",
+        owner="site_discovery_agent",
+        description=(
+            "Screen public data-center sites, then deeply validate drift and control quality."
+        ),
+        invocation_path="/agent-tools/site-discovery",
+    ),
+    ToolDefinition(
         name="analyze_thermal_drift_workflow",
         owner="planning_agent",
         description="Run the complete historical site-versus-control workflow.",

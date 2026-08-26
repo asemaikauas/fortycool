@@ -5,6 +5,8 @@ from fastapi.responses import StreamingResponse
 
 from .catalog import serialized_catalog
 from .copilot import CopilotError, CopilotUnavailableError, FortyCoolCopilot
+from .discovery import SiteDiscoveryAgent
+from .discovery_catalog import public_catalog
 from .jobs import RunJobManager
 from .models import (
     AnalysisMode,
@@ -12,6 +14,8 @@ from .models import (
     AnalysisResponse,
     CopilotRequest,
     CopilotResponse,
+    DiscoveryRequest,
+    DiscoveryResponse,
     RunJobStatus,
     TelemetryUpload,
 )
@@ -30,6 +34,10 @@ orchestrator = FortyCoolOrchestrator(telemetry_store=telemetry_store)
 run_repository = RunRepository()
 job_manager = RunJobManager(orchestrator, run_repository)
 copilot_service = FortyCoolCopilot()
+discovery_agent = SiteDiscoveryAgent(
+    orchestrator.provider,
+    orchestrator.urban_provider,
+)
 
 
 @app.get("/health")
@@ -66,6 +74,26 @@ async def copilot_request_schema() -> dict:
 @app.get("/schemas/copilot-response")
 async def copilot_response_schema() -> dict:
     return CopilotResponse.model_json_schema()
+
+
+@app.get("/schemas/discovery-request")
+async def discovery_request_schema() -> dict:
+    return DiscoveryRequest.model_json_schema()
+
+
+@app.get("/schemas/discovery-response")
+async def discovery_response_schema() -> dict:
+    return DiscoveryResponse.model_json_schema()
+
+
+@app.get("/discovery/catalog")
+async def discovery_catalog() -> list[dict]:
+    return [candidate.model_dump(mode="json") for candidate in public_catalog()]
+
+
+@app.post("/agent-tools/site-discovery", response_model=DiscoveryResponse)
+async def site_discovery_tool(request: DiscoveryRequest) -> DiscoveryResponse:
+    return await discovery_agent.run(request)
 
 
 @app.post("/telemetry/uploads", response_model=TelemetryUpload, status_code=status.HTTP_201_CREATED)

@@ -17,6 +17,7 @@ def test_health_and_tool_catalog() -> None:
     assert tools.status_code == 200
     assert {item["name"] for item in tools.json()} >= {
         "calculate_local_drift",
+        "discover_thermal_drift_site",
         "evaluate_operating_scenarios",
         "explain_completed_analysis",
         "review_recommendation_safety",
@@ -25,6 +26,25 @@ def test_health_and_tool_catalog() -> None:
     copilot_schema = client.get("/schemas/copilot-request")
     assert copilot_schema.status_code == 200
     assert "question" in copilot_schema.json()["properties"]
+
+    discovery_schema = client.get("/schemas/discovery-request")
+    assert discovery_schema.status_code == 200
+    assert "minimum_local_drift_c" in discovery_schema.json()["properties"]
+
+
+def test_public_catalog_and_discovery_tool_are_typed_and_evidence_backed() -> None:
+    catalog = client.get("/discovery/catalog")
+    discovery = client.post("/agent-tools/site-discovery", json={})
+
+    assert catalog.status_code == 200
+    assert len(catalog.json()) == 4
+    assert all(item["operator_source_url"].startswith("https://") for item in catalog.json())
+    assert discovery.status_code == 200
+    body = discovery.json()
+    assert body["status"] == "qualified_candidate_found"
+    assert body["winner"]["qualified"] is True
+    evidence_ids = {item["id"] for item in body["evidence"]}
+    assert set(body["winner"]["evidence_ids"]) <= evidence_ids
 
 
 def test_run_can_be_retrieved_with_evidence() -> None:
