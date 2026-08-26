@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script>(function(){try{var t=localStorage.getItem('fortycool-theme')||'dark';document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();</script>
+<link href="../css/theme-vars.css" rel="stylesheet"/>
+<title>FortyCool - History</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = { darkMode: "class", theme: { extend: {
+            colors: {
+                "error-container": "rgb(var(--color-error-container) / <alpha-value>)", "on-secondary": "rgb(var(--color-on-secondary) / <alpha-value>)", "secondary": "rgb(var(--color-secondary) / <alpha-value>)",
+                "chart-site": "rgb(var(--color-chart-site) / <alpha-value>)", "light-surface": "rgb(var(--color-light-surface) / <alpha-value>)", "on-tertiary-container": "rgb(var(--color-on-tertiary-container) / <alpha-value>)",
+                "safety-warning": "rgb(var(--color-safety-warning) / <alpha-value>)", "outline": "rgb(var(--color-outline) / <alpha-value>)", "on-background": "rgb(var(--color-on-background) / <alpha-value>)",
+                "on-primary-container": "rgb(var(--color-on-primary-container) / <alpha-value>)", "secondary-fixed-dim": "rgb(var(--color-secondary-fixed-dim) / <alpha-value>)", "surface-container-low": "rgb(var(--color-surface-container-low) / <alpha-value>)",
+                "status-inferred": "rgb(var(--color-status-inferred) / <alpha-value>)", "chart-cooling-end": "rgba(0, 112, 243, 0)", "light-container": "rgb(var(--color-light-container) / <alpha-value>)",
+                "on-error-container": "rgb(var(--color-on-error-container) / <alpha-value>)", "surface-bright": "rgb(var(--color-surface-bright) / <alpha-value>)", "secondary-container": "rgb(var(--color-secondary-container) / <alpha-value>)",
+                "on-tertiary": "rgb(var(--color-on-tertiary) / <alpha-value>)", "tertiary-fixed": "rgb(var(--color-tertiary-fixed) / <alpha-value>)", "outline-variant": "rgb(var(--color-outline-variant) / <alpha-value>)",
+                "status-simulated": "rgb(var(--color-status-simulated) / <alpha-value>)", "on-primary-fixed": "rgb(var(--color-on-primary-fixed) / <alpha-value>)", "surface-container-lowest": "rgb(var(--color-surface-container-lowest) / <alpha-value>)",
+                "on-tertiary-fixed": "rgb(var(--color-on-tertiary-fixed) / <alpha-value>)", "inverse-surface": "rgb(var(--color-inverse-surface) / <alpha-value>)", "on-primary-fixed-variant": "rgb(var(--color-on-primary-fixed-variant) / <alpha-value>)",
+                "on-secondary-container": "rgb(var(--color-on-secondary-container) / <alpha-value>)", "primary": "rgb(var(--color-primary) / <alpha-value>)", "background": "rgb(var(--color-background) / <alpha-value>)",
+                "chart-control": "rgb(var(--color-chart-control) / <alpha-value>)", "on-tertiary-fixed-variant": "rgb(var(--color-on-tertiary-fixed-variant) / <alpha-value>)", "primary-fixed-dim": "rgb(var(--color-primary-fixed-dim) / <alpha-value>)",
+                "safety-critical": "rgb(var(--color-safety-critical) / <alpha-value>)", "tertiary-container": "rgb(var(--color-tertiary-container) / <alpha-value>)", "on-secondary-fixed-variant": "rgb(var(--color-on-secondary-fixed-variant) / <alpha-value>)",
+                "safety-normal": "rgb(var(--color-safety-normal) / <alpha-value>)", "chart-cooling-start": "rgb(var(--color-chart-cooling-start) / <alpha-value>)", "inverse-on-surface": "rgb(var(--color-inverse-on-surface) / <alpha-value>)",
+                "on-primary": "rgb(var(--color-on-primary) / <alpha-value>)", "primary-fixed": "rgb(var(--color-primary-fixed) / <alpha-value>)", "secondary-fixed": "rgb(var(--color-secondary-fixed) / <alpha-value>)",
+                "light-accent": "rgb(var(--color-light-accent) / <alpha-value>)", "on-surface": "rgb(var(--color-on-surface) / <alpha-value>)", "on-secondary-fixed": "rgb(var(--color-on-secondary-fixed) / <alpha-value>)",
+                "on-error": "rgb(var(--color-on-error) / <alpha-value>)", "inverse-primary": "rgb(var(--color-inverse-primary) / <alpha-value>)", "surface-tint": "rgb(var(--color-surface-tint) / <alpha-value>)",
+                "status-assumed": "rgb(var(--color-status-assumed) / <alpha-value>)", "primary-container": "rgb(var(--color-primary-container) / <alpha-value>)", "surface-container": "rgb(var(--color-surface-container) / <alpha-value>)",
+                "tertiary-fixed-dim": "rgb(var(--color-tertiary-fixed-dim) / <alpha-value>)", "tertiary": "rgb(var(--color-tertiary) / <alpha-value>)", "surface-container-high": "rgb(var(--color-surface-container-high) / <alpha-value>)",
+                "surface-container-highest": "rgb(var(--color-surface-container-highest) / <alpha-value>)", "on-surface-variant": "rgb(var(--color-on-surface-variant) / <alpha-value>)", "status-observed": "rgb(var(--color-status-observed) / <alpha-value>)",
+                "surface-variant": "rgb(var(--color-surface-variant) / <alpha-value>)", "surface-dim": "rgb(var(--color-surface-dim) / <alpha-value>)", "surface": "rgb(var(--color-surface) / <alpha-value>)",
+                "error": "rgb(var(--color-error) / <alpha-value>)"
+            },
+            borderRadius: { "DEFAULT": "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+            spacing: { gutter: "24px", unit: "4px", "stack-sm": "8px", "margin-mobile": "16px", "stack-lg": "32px", "margin-desktop": "40px", "stack-md": "16px" },
+            fontFamily: { "body-lg": ["Geist", "sans-serif"], "headline-lg-mobile": ["Geist", "sans-serif"], "headline-lg": ["Geist", "sans-serif"], "label-sm": ["JetBrains Mono", "monospace"], "body-md": ["Geist", "sans-serif"], "label-md": ["JetBrains Mono", "monospace"], display: ["Geist", "sans-serif"], "headline-md": ["Geist", "sans-serif"] },
+            fontSize: {
+                "body-lg": ["16px", { lineHeight: "26px", fontWeight: "400" }],
+                "headline-lg-mobile": ["24px", { lineHeight: "28px", letterSpacing: "-0.03em", fontWeight: "600" }],
+                "headline-lg": ["32px", { lineHeight: "38px", letterSpacing: "-0.03em", fontWeight: "600" }],
+                "label-sm": ["11px", { lineHeight: "15px", letterSpacing: "0.05em", fontWeight: "400" }],
+                "body-md": ["14px", { lineHeight: "21px", fontWeight: "400" }],
+                "label-md": ["13px", { lineHeight: "18px", letterSpacing: "0.02em", fontWeight: "500" }],
+                display: ["48px", { lineHeight: "52px", letterSpacing: "-0.05em", fontWeight: "700" }],
+                "headline-md": ["24px", { lineHeight: "32px", letterSpacing: "-0.02em", fontWeight: "500" }]
+            }
+        } } }
+    </script>
+
+<link href="../css/shared.css" rel="stylesheet"/>
+<script defer src="../js/theme.js"></script>
+</head>
+<body class="history-page bg-background text-on-background font-body-md antialiased overflow-x-hidden">
+<div class="flex h-screen w-full relative">
+<nav class="h-full w-[248px] fixed left-0 top-0 bg-surface border-r border-outline-variant flex flex-col py-stack-lg z-30">
+<div class="px-gutter mb-stack-lg">
+<h1 class="fc-brand">FortyCool</h1>
+<p class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest mt-1">Industrial Intelligence</p>
+</div>
+<ul class="flex flex-col flex-1 gap-unit px-stack-sm overflow-y-auto">
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="command_center.html"><span class="material-symbols-outlined">dashboard</span><span class="text-label-md font-label-md">Command Center</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="site_setup.html"><span class="material-symbols-outlined">settings</span><span class="text-label-md font-label-md">Site Setup</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="optimization.html"><span class="material-symbols-outlined">insights</span><span class="text-label-md font-label-md">Optimization</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="thermal_drift.html"><span class="material-symbols-outlined">thermostat</span><span class="text-label-md font-label-md">ThermalDrift</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-primary border-l-2 border-primary font-bold bg-surface-container-high transition-colors" href="history.html"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">history</span><span class="text-label-md font-label-md">History</span></a></li>
+</ul>
+<div class="px-gutter mt-auto pt-stack-lg">
+<div class="flex items-center gap-stack-sm">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">account_circle</span>
+</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant uppercase">System Admin</div>
+</div>
+</div>
+</nav>
+<div class="flex-1 flex flex-col w-full h-full relative min-w-0">
+<header class="flex fixed top-0 right-0 left-[248px] h-16 bg-surface/80 backdrop-blur-md justify-between items-center px-gutter border-b border-outline-variant z-40 w-[calc(100%-248px)]">
+<span class="text-headline-sm">FortyCool Portfolio</span>
+<button class="text-on-surface-variant hover:text-primary transition-colors" data-theme-toggle="" title="Switch theme" aria-label="Switch theme">
+<span class="material-symbols-outlined">dark_mode</span>
+</button>
+</header>
+<main class="flex-1 ml-[248px] w-[calc(100%-248px)] max-w-[calc(100%-248px)] min-w-0 overflow-y-auto pt-24 px-margin-desktop pb-margin-desktop box-border">
+<div class="mb-stack-lg flex flex-col gap-unit">
+<h1 class="fc-page-title text-primary">Run History</h1>
+<p class="text-body-md font-body-md text-on-surface-variant" id="historyNote">Locally-tracked runs on this device (no server-side run list endpoint yet — ask backend for GET /runs to make this cross-device).</p>
+</div>
+<div class="history-table-wrap">
+<table class="history-table">
+<thead>
+<tr class="bg-surface-container-high border-b border-outline-variant">
+<th class="px-gutter py-stack-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest font-normal whitespace-nowrap">Started</th>
+<th class="px-gutter py-stack-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest font-normal w-[28%]">Run ID</th>
+<th class="px-gutter py-stack-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest font-normal w-[16%]">Status</th>
+<th class="px-gutter py-stack-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest font-normal w-[16%]">Confidence</th>
+<th class="px-gutter py-stack-sm text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest font-normal text-right w-[120px]">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant" id="historyTableBody">
+<tr><td class="px-gutter py-stack-md text-body-md text-on-surface-variant" colspan="5">No runs yet — start one from Site Setup.</td></tr>
+</tbody>
+</table>
+</div>
+</main>
+</div>
+</div>
+<script src="../js/api.js"></script>
+<script src="../js/pages/history.js"></script>
+</body></html>

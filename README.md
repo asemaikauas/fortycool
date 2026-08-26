@@ -63,6 +63,19 @@ Run the API:
 PYTHONPATH=src uvicorn fortycool_agents.api:app --reload --port 8000
 ```
 
+The integrated dashboard is served by the same process, so no separate frontend server or browser
+API key is required:
+
+```text
+http://127.0.0.1:8000/dashboard/pages/site_setup.html
+```
+
+The dashboard starts the complete ThermalDrift, 12-hour operations, and investment workflow through
+`POST /run-jobs`, renders the named SSE `trace` events while agents work, and then resolves metrics,
+charts, recommendations, assumptions, and evidence by their stable response IDs. BMS telemetry is
+simulated by default and visibly labelled; operators can instead upload a validated CSV from Site
+Setup. All actions remain advisory-only.
+
 Useful endpoints:
 
 ```text

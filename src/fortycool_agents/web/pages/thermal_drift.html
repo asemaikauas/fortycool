@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script>(function(){try{var t=localStorage.getItem('fortycool-theme')||'dark';document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();</script>
+<link href="../css/theme-vars.css" rel="stylesheet"/>
+<title>FortyCool — ThermalDrift Due Diligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = { darkMode: "class", theme: { extend: {
+            "colors": {
+                "error-container": "rgb(var(--color-error-container) / <alpha-value>)", "on-secondary": "rgb(var(--color-on-secondary) / <alpha-value>)", "secondary": "rgb(var(--color-secondary) / <alpha-value>)",
+                "chart-site": "rgb(var(--color-chart-site) / <alpha-value>)", "light-surface": "rgb(var(--color-light-surface) / <alpha-value>)", "on-tertiary-container": "rgb(var(--color-on-tertiary-container) / <alpha-value>)",
+                "safety-warning": "rgb(var(--color-safety-warning) / <alpha-value>)", "outline": "rgb(var(--color-outline) / <alpha-value>)", "on-background": "rgb(var(--color-on-background) / <alpha-value>)",
+                "on-primary-container": "rgb(var(--color-on-primary-container) / <alpha-value>)", "secondary-fixed-dim": "rgb(var(--color-secondary-fixed-dim) / <alpha-value>)", "surface-container-low": "rgb(var(--color-surface-container-low) / <alpha-value>)",
+                "status-inferred": "rgb(var(--color-status-inferred) / <alpha-value>)", "chart-cooling-end": "rgba(0, 112, 243, 0)", "light-container": "rgb(var(--color-light-container) / <alpha-value>)",
+                "on-error-container": "rgb(var(--color-on-error-container) / <alpha-value>)", "surface-bright": "rgb(var(--color-surface-bright) / <alpha-value>)", "secondary-container": "rgb(var(--color-secondary-container) / <alpha-value>)",
+                "on-tertiary": "rgb(var(--color-on-tertiary) / <alpha-value>)", "tertiary-fixed": "rgb(var(--color-tertiary-fixed) / <alpha-value>)", "outline-variant": "rgb(var(--color-outline-variant) / <alpha-value>)",
+                "status-simulated": "rgb(var(--color-status-simulated) / <alpha-value>)", "on-primary-fixed": "rgb(var(--color-on-primary-fixed) / <alpha-value>)", "surface-container-lowest": "rgb(var(--color-surface-container-lowest) / <alpha-value>)",
+                "on-tertiary-fixed": "rgb(var(--color-on-tertiary-fixed) / <alpha-value>)", "inverse-surface": "rgb(var(--color-inverse-surface) / <alpha-value>)", "on-primary-fixed-variant": "rgb(var(--color-on-primary-fixed-variant) / <alpha-value>)",
+                "on-secondary-container": "rgb(var(--color-on-secondary-container) / <alpha-value>)", "primary": "rgb(var(--color-primary) / <alpha-value>)", "background": "rgb(var(--color-background) / <alpha-value>)",
+                "chart-control": "rgb(var(--color-chart-control) / <alpha-value>)", "on-tertiary-fixed-variant": "rgb(var(--color-on-tertiary-fixed-variant) / <alpha-value>)", "primary-fixed-dim": "rgb(var(--color-primary-fixed-dim) / <alpha-value>)",
+                "safety-critical": "rgb(var(--color-safety-critical) / <alpha-value>)", "tertiary-container": "rgb(var(--color-tertiary-container) / <alpha-value>)", "on-secondary-fixed-variant": "rgb(var(--color-on-secondary-fixed-variant) / <alpha-value>)",
+                "safety-normal": "rgb(var(--color-safety-normal) / <alpha-value>)", "chart-cooling-start": "rgb(var(--color-chart-cooling-start) / <alpha-value>)", "inverse-on-surface": "rgb(var(--color-inverse-on-surface) / <alpha-value>)",
+                "on-primary": "rgb(var(--color-on-primary) / <alpha-value>)", "primary-fixed": "rgb(var(--color-primary-fixed) / <alpha-value>)", "secondary-fixed": "rgb(var(--color-secondary-fixed) / <alpha-value>)",
+                "light-accent": "rgb(var(--color-light-accent) / <alpha-value>)", "on-surface": "rgb(var(--color-on-surface) / <alpha-value>)", "on-secondary-fixed": "rgb(var(--color-on-secondary-fixed) / <alpha-value>)",
+                "on-error": "rgb(var(--color-on-error) / <alpha-value>)", "inverse-primary": "rgb(var(--color-inverse-primary) / <alpha-value>)", "surface-tint": "rgb(var(--color-surface-tint) / <alpha-value>)",
+                "status-assumed": "rgb(var(--color-status-assumed) / <alpha-value>)", "primary-container": "rgb(var(--color-primary-container) / <alpha-value>)", "surface-container": "rgb(var(--color-surface-container) / <alpha-value>)",
+                "tertiary-fixed-dim": "rgb(var(--color-tertiary-fixed-dim) / <alpha-value>)", "tertiary": "rgb(var(--color-tertiary) / <alpha-value>)", "surface-container-high": "rgb(var(--color-surface-container-high) / <alpha-value>)",
+                "surface-container-highest": "rgb(var(--color-surface-container-highest) / <alpha-value>)", "on-surface-variant": "rgb(var(--color-on-surface-variant) / <alpha-value>)", "status-observed": "rgb(var(--color-status-observed) / <alpha-value>)",
+                "surface-variant": "rgb(var(--color-surface-variant) / <alpha-value>)", "surface-dim": "rgb(var(--color-surface-dim) / <alpha-value>)", "surface": "rgb(var(--color-surface) / <alpha-value>)",
+                "error": "rgb(var(--color-error) / <alpha-value>)"
+            },
+            "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+            "spacing": { "gutter": "24px", "unit": "4px", "stack-sm": "8px", "margin-mobile": "16px", "stack-lg": "32px", "margin-desktop": "40px", "stack-md": "16px" },
+            "fontFamily": { "body-lg": ["Geist"], "headline-lg-mobile": ["Geist"], "headline-lg": ["Geist"], "label-sm": ["JetBrains Mono"], "body-md": ["Geist"], "label-md": ["JetBrains Mono"], "display": ["Geist"], "headline-md": ["Geist"] },
+            "fontSize": {
+                "body-lg": ["16px", { "lineHeight": "26px", "fontWeight": "400" }],
+                "headline-lg-mobile": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.03em", "fontWeight": "600" }],
+                "headline-lg": ["32px", { "lineHeight": "38px", "letterSpacing": "-0.03em", "fontWeight": "600" }],
+                "label-sm": ["11px", { "lineHeight": "15px", "letterSpacing": "0.05em", "fontWeight": "400" }],
+                "body-md": ["14px", { "lineHeight": "21px", "fontWeight": "400" }],
+                "label-md": ["13px", { "lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                "display": ["48px", { "lineHeight": "52px", "letterSpacing": "-0.05em", "fontWeight": "700" }],
+                "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "500" }]
+            }
+        } } }
+    </script>
+<style>
+        .chart-grid {
+            background-image: linear-gradient(rgb(var(--color-outline-variant)) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--color-outline-variant)) 1px, transparent 1px);
+            background-size: 100% 20%, 10% 100%; background-position: 0 100%;
+        }
+        .chart-line-site { stroke: rgb(var(--color-chart-site)); stroke-width: 2px; fill: none; }
+        .chart-line-control { stroke: rgb(var(--color-chart-control)); stroke-width: 2px; fill: none; stroke-dasharray: 4; }
+    </style>
+<link href="../css/shared.css" rel="stylesheet"/>
+<script defer src="../js/theme.js"></script>
+</head>
+<body class="font-body-md text-body-md antialiased overflow-x-hidden min-h-screen">
+<header class="fixed top-0 right-0 left-[248px] h-16 bg-surface/80 backdrop-blur-md border-b border-outline-variant flex justify-between items-center px-gutter w-[calc(100%-248px)] z-40">
+<h1 class="text-headline-sm" id="siteLabel">FortyCool Site Analysis</h1>
+<button class="text-on-surface-variant hover:text-primary transition-colors" data-theme-toggle="" title="Switch theme" aria-label="Switch theme">
+<span class="material-symbols-outlined">dark_mode</span>
+</button>
+</header>
+<nav class="h-full w-[248px] fixed left-0 top-0 bg-surface border-r border-outline-variant flex flex-col py-stack-lg z-30">
+<div class="px-gutter mb-stack-lg">
+<h1 class="fc-brand">FortyCool</h1>
+<p class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest mt-1">Industrial Intelligence</p>
+</div>
+<ul class="flex flex-col flex-1 gap-unit px-stack-sm overflow-y-auto">
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="command_center.html"><span class="material-symbols-outlined">dashboard</span><span class="text-label-md font-label-md">Command Center</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="site_setup.html"><span class="material-symbols-outlined">settings</span><span class="text-label-md font-label-md">Site Setup</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="optimization.html"><span class="material-symbols-outlined">insights</span><span class="text-label-md font-label-md">Optimization</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-primary border-l-2 border-primary font-bold bg-surface-container-high transition-colors" href="thermal_drift.html"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">thermostat</span><span class="text-label-md font-label-md">ThermalDrift</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="history.html"><span class="material-symbols-outlined">history</span><span class="text-label-md font-label-md">History</span></a></li>
+</ul>
+<div class="px-gutter mt-auto pt-stack-lg">
+<div class="flex items-center gap-stack-sm">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">account_circle</span>
+</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant uppercase">System Admin</div>
+</div>
+</div>
+</nav>
+<main class="ml-[248px] pt-24 px-margin-desktop pb-stack-lg min-h-screen">
+<header class="mb-stack-lg">
+<div class="flex items-center justify-between gap-4"><h2 class="fc-page-title text-primary mb-unit">ThermalDrift Due Diligence</h2><span class="px-2 py-1 border border-outline-variant text-label-sm font-label-sm text-on-surface-variant" id="thermalDataClass">AWAITING DATA</span></div>
+<p class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider" id="driftSubtitle">Site vs Regional Control — no run loaded</p>
+</header>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<div class="lg:col-span-8 flex flex-col gap-gutter">
+<section class="bg-surface-container-low border border-outline-variant p-gutter flex flex-col min-h-[400px]">
+<div class="flex justify-between items-start mb-stack-md">
+<div>
+<h3 class="font-label-md text-label-md text-primary mb-1">TEMPERATURE DEVIATION</h3>
+<div class="flex gap-stack-md items-center">
+<div class="flex items-center gap-2"><div class="w-3 h-0.5 bg-chart-site"></div><span class="font-label-sm text-label-sm text-on-surface-variant">Site Local</span></div>
+<div class="flex items-center gap-2"><div class="w-3 h-0.5 bg-chart-control border border-dashed border-chart-control"></div><span class="font-label-sm text-label-sm text-on-surface-variant">Regional Control</span></div>
+</div>
+</div>
+</div>
+<div class="flex-grow relative mt-4 chart-grid border-b border-l border-outline-variant">
+<svg class="absolute inset-0 w-full h-full overflow-visible" id="driftChartSvg" preserveaspectratio="none" viewbox="0 0 100 100">
+<path class="chart-line-control" d="" id="controlTrendPath"></path>
+<path class="chart-line-site" d="" id="siteTrendPath"></path>
+</svg>
+<div class="absolute -bottom-6 left-0 right-0 flex justify-between text-label-sm font-label-sm text-on-surface-variant" id="driftYears"></div>
+</div>
+</section>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-gutter">
+<div class="bg-surface-container-low border border-outline-variant p-gutter flex flex-col justify-between">
+<div class="flex items-center gap-2 mb-stack-md text-on-surface-variant"><span class="material-symbols-outlined text-[18px]">attach_money</span><span class="font-label-sm text-label-sm uppercase tracking-wider">Financial Exposure</span></div>
+<div class="flex items-baseline gap-2"><span class="font-display text-display text-primary" id="financialExposure">$0</span></div>
+<div class="font-label-sm text-label-sm text-status-assumed mt-2" id="financialClass">Indicative scenario</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant p-gutter flex flex-col justify-between">
+<div class="flex items-center gap-2 mb-stack-md text-on-surface-variant"><span class="material-symbols-outlined text-[18px]">thermostat</span><span class="font-label-sm text-label-sm uppercase tracking-wider">Local Excess Warming</span></div>
+<div class="flex items-baseline gap-2"><span class="font-display text-display text-safety-critical" id="driftValue">—</span><span class="font-label-sm text-label-sm text-on-surface-variant">°C/year</span></div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant p-gutter flex flex-col justify-between">
+<div class="flex items-center gap-2 mb-stack-md text-on-surface-variant"><span class="material-symbols-outlined text-[18px]">ac_unit</span><span class="font-label-sm text-label-sm uppercase tracking-wider">Eligible Hours Lost</span></div>
+<div class="flex items-baseline gap-2"><span class="font-display text-display text-primary" id="eligibleHours">—</span><span class="font-label-sm text-label-sm text-on-surface-variant">h/year</span></div>
+</div>
+</div>
+<section class="bg-surface-container-low border border-outline-variant p-gutter flex flex-col min-h-[300px]">
+<div class="flex justify-between items-start"><div><h3 class="font-label-md text-label-md text-primary mb-1">LOCAL BUILDOUT VS MATCHED CONTROLS</h3><p class="font-label-sm text-label-sm text-on-surface-variant">Dynamic World annual 10 m land-cover history</p></div><span class="font-label-sm text-label-sm text-status-observed" id="landCoverClass">—</span></div>
+<div class="flex-grow relative mt-6 chart-grid border-b border-l border-outline-variant">
+<svg class="absolute inset-0 w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 100 100"><path class="chart-line-control" d="" id="controlBuiltPath"></path><path class="chart-line-site" d="" id="siteBuiltPath"></path></svg>
+</div>
+</section>
+</div>
+<div class="lg:col-span-4 flex flex-col h-full">
+<section class="bg-surface-container-low border border-outline-variant flex flex-col h-full">
+<div class="p-stack-md border-b border-outline-variant flex justify-between items-center bg-surface-container-high/50">
+<h3 class="font-label-md text-label-md text-primary tracking-wider uppercase">Control & Attribution</h3>
+<span class="px-2 py-0.5 bg-status-inferred/10 text-status-inferred border border-status-inferred/30 font-label-sm text-label-sm">DIFFERENCE-IN-DIFFERENCES</span>
+</div>
+<div class="flex-grow overflow-y-auto p-stack-md flex flex-col gap-stack-md">
+<div class="border border-outline-variant bg-surface p-4"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Control match score</div><div class="text-headline-md text-primary mt-1" id="controlScore">—</div><div class="text-label-sm font-label-sm text-on-surface-variant mt-1" id="controlStatus">Awaiting controls</div></div>
+<div class="border border-outline-variant bg-surface p-4"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Local excess built surface</div><div class="text-headline-md text-primary mt-1" id="builtChange">—</div><div class="text-label-sm font-label-sm text-on-surface-variant mt-1">site change minus matched controls</div></div>
+<div class="border border-outline-variant bg-surface p-4"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Thermal / buildout association</div><div class="text-headline-md text-primary mt-1" id="association">—</div><div class="text-label-sm font-label-sm text-safety-warning mt-1">Association supports a hypothesis; it does not establish causality.</div></div>
+<div class="border-l-2 border-status-observed bg-status-observed/10 p-4 text-label-sm font-label-sm text-on-surface-variant" id="thermalEvidence">Every number will link to the exact provider and calculation evidence after the run completes.</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+<script src="../js/api.js"></script>
+<script src="../js/pages/thermal_drift.js"></script>
+</body></html>

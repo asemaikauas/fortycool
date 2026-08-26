@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script>(function(){try{var t=localStorage.getItem('fortycool-theme')||'dark';document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();</script>
+<link href="../css/theme-vars.css" rel="stylesheet"/>
+<title>FortyCool - Site Setup</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                "error-container": "rgb(var(--color-error-container) / <alpha-value>)", "on-secondary": "rgb(var(--color-on-secondary) / <alpha-value>)", "secondary": "rgb(var(--color-secondary) / <alpha-value>)",
+                "chart-site": "rgb(var(--color-chart-site) / <alpha-value>)", "light-surface": "rgb(var(--color-light-surface) / <alpha-value>)", "on-tertiary-container": "rgb(var(--color-on-tertiary-container) / <alpha-value>)",
+                "safety-warning": "rgb(var(--color-safety-warning) / <alpha-value>)", "outline": "rgb(var(--color-outline) / <alpha-value>)", "on-background": "rgb(var(--color-on-background) / <alpha-value>)",
+                "on-primary-container": "rgb(var(--color-on-primary-container) / <alpha-value>)", "secondary-fixed-dim": "rgb(var(--color-secondary-fixed-dim) / <alpha-value>)", "surface-container-low": "rgb(var(--color-surface-container-low) / <alpha-value>)",
+                "status-inferred": "rgb(var(--color-status-inferred) / <alpha-value>)", "chart-cooling-end": "rgba(0, 112, 243, 0)", "light-container": "rgb(var(--color-light-container) / <alpha-value>)",
+                "on-error-container": "rgb(var(--color-on-error-container) / <alpha-value>)", "surface-bright": "rgb(var(--color-surface-bright) / <alpha-value>)", "secondary-container": "rgb(var(--color-secondary-container) / <alpha-value>)",
+                "on-tertiary": "rgb(var(--color-on-tertiary) / <alpha-value>)", "tertiary-fixed": "rgb(var(--color-tertiary-fixed) / <alpha-value>)", "outline-variant": "rgb(var(--color-outline-variant) / <alpha-value>)",
+                "status-simulated": "rgb(var(--color-status-simulated) / <alpha-value>)", "on-primary-fixed": "rgb(var(--color-on-primary-fixed) / <alpha-value>)", "surface-container-lowest": "rgb(var(--color-surface-container-lowest) / <alpha-value>)",
+                "on-tertiary-fixed": "rgb(var(--color-on-tertiary-fixed) / <alpha-value>)", "inverse-surface": "rgb(var(--color-inverse-surface) / <alpha-value>)", "on-primary-fixed-variant": "rgb(var(--color-on-primary-fixed-variant) / <alpha-value>)",
+                "on-secondary-container": "rgb(var(--color-on-secondary-container) / <alpha-value>)", "primary": "rgb(var(--color-primary) / <alpha-value>)", "background": "rgb(var(--color-background) / <alpha-value>)",
+                "chart-control": "rgb(var(--color-chart-control) / <alpha-value>)", "on-tertiary-fixed-variant": "rgb(var(--color-on-tertiary-fixed-variant) / <alpha-value>)", "primary-fixed-dim": "rgb(var(--color-primary-fixed-dim) / <alpha-value>)",
+                "safety-critical": "rgb(var(--color-safety-critical) / <alpha-value>)", "tertiary-container": "rgb(var(--color-tertiary-container) / <alpha-value>)", "on-secondary-fixed-variant": "rgb(var(--color-on-secondary-fixed-variant) / <alpha-value>)",
+                "safety-normal": "rgb(var(--color-safety-normal) / <alpha-value>)", "chart-cooling-start": "rgb(var(--color-chart-cooling-start) / <alpha-value>)", "inverse-on-surface": "rgb(var(--color-inverse-on-surface) / <alpha-value>)",
+                "on-primary": "rgb(var(--color-on-primary) / <alpha-value>)", "primary-fixed": "rgb(var(--color-primary-fixed) / <alpha-value>)", "secondary-fixed": "rgb(var(--color-secondary-fixed) / <alpha-value>)",
+                "light-accent": "rgb(var(--color-light-accent) / <alpha-value>)", "on-surface": "rgb(var(--color-on-surface) / <alpha-value>)", "on-secondary-fixed": "rgb(var(--color-on-secondary-fixed) / <alpha-value>)",
+                "on-error": "rgb(var(--color-on-error) / <alpha-value>)", "inverse-primary": "rgb(var(--color-inverse-primary) / <alpha-value>)", "surface-tint": "rgb(var(--color-surface-tint) / <alpha-value>)",
+                "status-assumed": "rgb(var(--color-status-assumed) / <alpha-value>)", "primary-container": "rgb(var(--color-primary-container) / <alpha-value>)", "surface-container": "rgb(var(--color-surface-container) / <alpha-value>)",
+                "tertiary-fixed-dim": "rgb(var(--color-tertiary-fixed-dim) / <alpha-value>)", "tertiary": "rgb(var(--color-tertiary) / <alpha-value>)", "surface-container-high": "rgb(var(--color-surface-container-high) / <alpha-value>)",
+                "surface-container-highest": "rgb(var(--color-surface-container-highest) / <alpha-value>)", "on-surface-variant": "rgb(var(--color-on-surface-variant) / <alpha-value>)", "status-observed": "rgb(var(--color-status-observed) / <alpha-value>)",
+                "surface-variant": "rgb(var(--color-surface-variant) / <alpha-value>)", "surface-dim": "rgb(var(--color-surface-dim) / <alpha-value>)", "surface": "rgb(var(--color-surface) / <alpha-value>)",
+                "error": "rgb(var(--color-error) / <alpha-value>)"
+              },
+              "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+              "spacing": { "gutter": "24px", "unit": "4px", "stack-sm": "8px", "margin-mobile": "16px", "stack-lg": "32px", "margin-desktop": "40px", "stack-md": "16px" },
+              "fontFamily": { "body-lg": ["Geist"], "headline-lg-mobile": ["Geist"], "headline-lg": ["Geist"], "label-sm": ["JetBrains Mono"], "body-md": ["Geist"], "label-md": ["JetBrains Mono"], "display": ["Geist"], "headline-md": ["Geist"] },
+              "fontSize": {
+                      "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "28px", "letterSpacing": "-0.03em", "fontWeight": "600"}],
+                      "headline-lg": ["32px", {"lineHeight": "38px", "letterSpacing": "-0.03em", "fontWeight": "600"}],
+                      "label-sm": ["11px", {"lineHeight": "15px", "letterSpacing": "0.05em", "fontWeight": "400"}],
+                      "body-md": ["14px", {"lineHeight": "21px", "fontWeight": "400"}],
+                      "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                      "display": ["48px", {"lineHeight": "52px", "letterSpacing": "-0.05em", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "500"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: rgb(var(--color-surface-container-lowest)); }
+        ::-webkit-scrollbar-thumb { background: rgb(var(--color-outline-variant)); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgb(var(--color-outline)); }
+        .heatmap-overlay {
+            background: radial-gradient(circle at 30% 40%, rgb(var(--color-safety-critical)) 0%, transparent 20%),
+                        radial-gradient(circle at 70% 60%, rgb(var(--color-safety-warning)) 0%, transparent 25%),
+                        radial-gradient(circle at 50% 50%, rgb(var(--color-chart-cooling-start)) 0%, transparent 40%);
+            opacity: 0.6; mix-blend-mode: screen;
+        }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 2px; background: rgb(var(--color-primary)); cursor: pointer; margin-top: -6px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgb(var(--color-outline-variant)); border-radius: 2px; }
+    </style>
+<link href="../css/shared.css" rel="stylesheet"/>
+<script defer src="../js/theme.js"></script>
+</head>
+<body class="bg-surface text-on-surface font-body-md text-body-md h-screen overflow-hidden flex">
+<nav class="h-full w-[248px] fixed left-0 top-0 bg-surface border-r border-outline-variant flex flex-col py-stack-lg z-30">
+<div class="px-gutter mb-stack-lg">
+<h1 class="fc-brand">FortyCool</h1>
+<p class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest mt-1">Industrial Intelligence</p>
+</div>
+<ul class="flex flex-col flex-1 gap-unit px-stack-sm overflow-y-auto">
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="command_center.html"><span class="material-symbols-outlined">dashboard</span><span class="text-label-md font-label-md">Command Center</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-primary border-l-2 border-primary font-bold bg-surface-container-high transition-colors" href="site_setup.html"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span><span class="text-label-md font-label-md">Site Setup</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="optimization.html"><span class="material-symbols-outlined">insights</span><span class="text-label-md font-label-md">Optimization</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="thermal_drift.html"><span class="material-symbols-outlined">thermostat</span><span class="text-label-md font-label-md">ThermalDrift</span></a></li>
+<li><a class="flex items-center gap-stack-sm px-gutter py-stack-sm rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="history.html"><span class="material-symbols-outlined">history</span><span class="text-label-md font-label-md">History</span></a></li>
+</ul>
+<div class="px-gutter mt-auto pt-stack-lg">
+<div class="flex items-center gap-stack-sm">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">account_circle</span>
+</div>
+<div class="text-label-sm font-label-sm text-on-surface-variant uppercase">System Admin</div>
+</div>
+</div>
+</nav>
+<header class="fixed top-0 right-0 left-[248px] h-16 bg-surface/80 backdrop-blur-md border-b border-outline-variant flex justify-between items-center px-gutter w-[calc(100%-248px)] z-40">
+<div class="flex items-center gap-4">
+<h2 class="text-headline-sm" id="siteLabel">New Site</h2>
+<div class="h-4 w-px bg-outline-variant"></div>
+<span class="text-label-sm font-label-sm text-on-surface-variant flex items-center gap-1" id="setupStatus">
+<span class="w-2 h-2 rounded-full bg-status-observed inline-block"></span> DRAFT CONFIG
+            </span>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors" data-theme-toggle="" title="Switch theme" aria-label="Switch theme">
+<span class="material-symbols-outlined">dark_mode</span>
+</button>
+</header>
+<main class="ml-[248px] mt-16 w-full h-[calc(100vh-64px)] p-gutter flex flex-col md:flex-row gap-gutter overflow-hidden">
+<section class="flex-grow w-full md:w-2/3 h-full flex flex-col bg-surface-container-low border border-outline-variant rounded relative">
+<div class="h-12 border-b border-outline-variant bg-surface flex items-center justify-between px-4 z-10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">map</span>
+<span class="text-label-sm font-label-sm text-primary uppercase tracking-wider">Topography &amp; Thermal Model</span>
+</div>
+<div class="flex items-center gap-2">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="sampleSitePicker">SAMPLE SITE</label>
+<select class="bg-surface-container-highest border border-outline-variant rounded text-label-sm font-label-sm text-primary px-2 py-1" id="sampleSitePicker">
+<option value="">Custom...</option>
+<option data-lat="39.01" data-lon="-77.46" data-timezone="America/New_York" selected value="nova-demo">Northern Virginia Demo Campus</option>
+</select>
+</div>
+</div>
+<div class="relative flex-grow w-full bg-background overflow-hidden cursor-crosshair group">
+<div class="absolute inset-0 bg-cover bg-center opacity-40" style="background-image: linear-gradient(#1c1b1b, #1c1b1b)"></div>
+<div class="absolute inset-0" style="background-image: linear-gradient(rgb(var(--color-outline-variant)) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--color-outline-variant)) 1px, transparent 1px); background-size: 64px 64px; opacity: 0.1;"></div>
+<div class="absolute inset-0 heatmap-overlay mix-blend-color-dodge"></div>
+<div class="absolute right-4 bottom-4 flex flex-col gap-2">
+<button class="w-8 h-8 bg-surface/90 backdrop-blur border border-outline-variant rounded flex items-center justify-center hover:border-primary text-on-surface transition-colors"><span class="material-symbols-outlined text-sm">add</span></button>
+<button class="w-8 h-8 bg-surface/90 backdrop-blur border border-outline-variant rounded flex items-center justify-center hover:border-primary text-on-surface transition-colors"><span class="material-symbols-outlined text-sm">remove</span></button>
+</div>
+</div>
+<div class="h-10 border-t border-outline-variant bg-surface flex items-center justify-between px-4">
+<span class="text-label-sm font-label-sm text-on-surface-variant" id="coordsLabel">LAT: — | LNG: —</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant flex items-center gap-1" id="syncLabel">
+<span class="material-symbols-outlined text-[14px]">satellite_alt</span> Not analyzed yet
+                </span>
+</div>
+</section>
+<section class="w-full md:w-1/3 h-full flex flex-col bg-surface border border-outline-variant rounded">
+<div class="h-12 border-b border-outline-variant bg-surface flex items-center px-4 shrink-0">
+<span class="text-label-md font-label-md text-primary uppercase tracking-wider">Site Configuration</span>
+</div>
+<div class="flex-grow overflow-y-auto p-4 space-y-6">
+<div class="flex flex-col gap-1">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="locationInput">LOCATION IDENTIFIER</label>
+<input class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-body-md font-body-md text-primary focus:outline-none focus:border-primary transition-colors w-full" id="locationInput" type="text" value="Northern Virginia Demo Campus"/>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="latInput">LATITUDE</label>
+<input class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-label-md font-label-md text-primary focus:outline-none focus:border-primary transition-colors w-full font-mono" id="latInput" type="text" value="39.01"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="lonInput">LONGITUDE</label>
+<input class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-label-md font-label-md text-primary focus:outline-none focus:border-primary transition-colors w-full font-mono" id="lonInput" type="text" value="-77.46"/>
+</div>
+</div>
+<div class="flex flex-col gap-2 p-4 bg-surface-container-lowest border border-outline-variant rounded">
+<div class="flex justify-between items-end">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="itLoadSlider">PROVISIONED IT LOAD</label>
+<span class="fc-section-title text-primary" id="itLoadValue">10 MW</span>
+</div>
+<input class="w-full mt-2" id="itLoadSlider" max="50" min="1" oninput="document.getElementById('itLoadValue').innerText = this.value + ' MW'" type="range" value="10"/>
+<div class="flex justify-between w-full mt-1">
+<span class="text-[10px] font-label-sm text-outline">1 MW</span>
+<span class="text-[10px] font-label-sm text-outline">50 MW</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="pueInput">TARGET PUE (Power Usage Effectiveness)</label>
+<div class="relative">
+<input class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-label-md font-label-md text-primary focus:outline-none focus:border-primary transition-colors w-full pl-10 font-mono" id="pueInput" step="0.01" type="number" value="1.25"/>
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-on-surface-variant text-[16px]">speed</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="priceInput">BASE POWER PRICE (USD)</label>
+<div class="relative">
+<input class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-label-md font-label-md text-primary focus:outline-none focus:border-primary transition-colors w-full pl-8 pr-12 font-mono" id="priceInput" step="0.01" type="number" value="0.08"/>
+<span class="absolute left-3 top-2.5 text-on-surface-variant text-label-md font-label-md">$</span>
+<span class="absolute right-3 top-2.5 text-on-surface-variant text-[10px] font-label-sm mt-0.5">/kWh</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="baselineYearInput">BASELINE YEAR</label>
+<input class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-label-md font-label-md text-primary focus:outline-none focus:border-primary font-mono" id="baselineYearInput" min="2019" max="2025" type="number" value="2022"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-label-sm font-label-sm text-on-surface-variant" for="thresholdInput">FREE-COOLING THRESHOLD</label>
+<div class="relative">
+<input class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 pr-10 text-label-md font-label-md text-primary focus:outline-none focus:border-primary w-full font-mono" id="thresholdInput" min="-30" max="50" step="0.5" type="number" value="18"/>
+<span class="absolute right-3 top-2.5 text-on-surface-variant text-label-sm">°C</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-2 p-4 bg-surface-container-lowest border border-outline-variant rounded">
+<div class="flex items-center justify-between">
+<div>
+<div class="text-label-sm font-label-sm text-primary uppercase">Facility telemetry</div>
+<div class="text-[11px] font-label-sm text-on-surface-variant mt-1">Simulation is clearly labelled; upload a CSV to replace it.</div>
+</div>
+<select class="bg-surface-container-highest border border-outline-variant rounded text-label-sm font-label-sm text-primary px-2 py-1" id="telemetrySource">
+<option selected value="simulated">Simulated digital twin</option>
+<option value="uploaded">Uploaded BMS CSV</option>
+</select>
+</div>
+<div class="hidden flex-col gap-2 pt-2" id="telemetryUploadPanel">
+<input accept=".csv,text/csv" class="text-label-sm font-label-sm text-on-surface-variant file:mr-3 file:border file:border-outline-variant file:bg-surface file:text-primary file:px-3 file:py-1" id="telemetryFile" type="file"/>
+<div class="text-[11px] font-label-sm text-on-surface-variant" id="telemetryUploadStatus">Select at least 14 days of BMS telemetry.</div>
+</div>
+</div>
+<div class="flex items-center gap-2 px-3 py-2 border-l-2 border-status-inferred bg-status-inferred/10 text-label-sm font-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-status-inferred">account_tree</span>
+ThermalDrift + 12-hour operations + investment analysis
+</div>
+<div class="pt-4 border-t border-outline-variant flex gap-3">
+<button class="flex-1 bg-primary text-on-primary py-2 rounded text-label-md font-label-md hover:bg-primary-fixed transition-colors" id="analyzeBtn">ANALYZE SITE</button>
+<button class="px-4 bg-transparent border border-outline-variant text-primary py-2 rounded text-label-md font-label-md hover:border-primary transition-colors" id="revertBtn">REVERT</button>
+</div>
+</div>
+<div class="h-48 border-t border-outline-variant bg-[#0a0a0a] flex flex-col shrink-0 relative overflow-hidden">
+<div class="px-3 py-1 border-b border-outline-variant/30 flex justify-between items-center bg-[#0a0a0a]">
+<span class="text-[10px] font-label-sm text-on-surface-variant uppercase">System Status Console</span>
+</div>
+<div class="p-3 overflow-y-auto font-label-sm text-[11px] leading-relaxed font-mono flex-1 text-on-surface-variant" id="terminalLog">
+<div class="text-status-observed">[SYS] Ready. Configure a site and click Analyze.</div>
+<div class="mt-2 animate-pulse text-primary">_</div>
+</div>
+</div>
+</section>
+</main>
+<script src="../js/api.js"></script>
+<script src="../js/pages/site_setup.js"></script>
+</body></html>

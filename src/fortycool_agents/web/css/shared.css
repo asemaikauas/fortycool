@@ -1,0 +1,242 @@
+/* FortyCool shared UI foundation — one visual system across every page. */
+:root {
+  --fc-font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --fc-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+html {
+  background: rgb(var(--color-background));
+  color: rgb(var(--color-on-background));
+  color-scheme: light;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html.dark { color-scheme: dark; }
+
+html, body, button, input, textarea, select, option {
+  font-family: var(--fc-font-sans);
+}
+
+body {
+  margin: 0;
+  background: rgb(var(--color-background));
+  color: rgb(var(--color-on-background));
+  font-family: var(--fc-font-sans);
+}
+
+button, input, textarea, select { font: inherit; }
+
+button, a, input, textarea, select { touch-action: manipulation; }
+
+:focus-visible {
+  outline: 2px solid rgb(var(--color-status-observed));
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(var(--color-primary) / 0.14);
+  color: rgb(var(--color-on-background));
+}
+
+/* Keep data/UI labels consistent without changing prose typography. */
+.font-label-sm, .font-label-md, .font-mono { font-family: var(--fc-font-mono); }
+
+/* Vercel-style crisp surfaces: subtle border + restrained shadow. */
+.fc-surface {
+  border: 1px solid rgb(var(--color-outline-variant));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.03);
+}
+
+.dark .fc-surface {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28), 0 8px 24px rgb(0 0 0 / 0.16);
+}
+
+/* Native controls need explicit colors in light/dark mode (especially Windows). */
+input, textarea, select {
+  color: rgb(var(--color-on-surface));
+  background-color: rgb(var(--color-surface));
+  border-color: rgb(var(--color-outline));
+}
+
+option {
+  color: rgb(var(--color-on-surface));
+  background-color: rgb(var(--color-surface));
+}
+
+::placeholder { color: rgb(var(--color-on-surface-variant) / 0.78); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgb(var(--color-surface-container-lowest)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--color-outline-variant)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--color-outline)); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Shared heading scale: identical site/header labels on every page. */
+.text-headline-sm, .font-headline-sm {
+  font-family: var(--fc-font-sans);
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* FORTYCOOL GLOBAL SHELL: identical sidebar geometry on every page */
+:root{--fc-sidebar-width:248px;--fc-sidebar-padding-x:16px;--fc-sidebar-top:20px;--fc-sidebar-item-height:40px;--fc-sidebar-gap:4px}
+body{font-family:var(--fc-font-sans)!important}
+aside,.sidebar,.side-nav,.app-sidebar,.fc-sidebar{width:var(--fc-sidebar-width)!important;min-width:var(--fc-sidebar-width)!important;max-width:var(--fc-sidebar-width)!important;box-sizing:border-box!important;padding:var(--fc-sidebar-top) var(--fc-sidebar-padding-x)!important;font-family:var(--fc-font-sans)!important}
+aside a,aside button,.sidebar a,.sidebar button,.side-nav a,.side-nav button,.app-sidebar a,.app-sidebar button,.fc-sidebar a,.fc-sidebar button{font-family:var(--fc-font-sans)!important;font-size:14px!important;line-height:20px!important;font-weight:500!important;min-height:var(--fc-sidebar-item-height)!important;height:var(--fc-sidebar-item-height)!important;box-sizing:border-box!important;display:flex!important;align-items:center!important}
+aside ul,.sidebar ul,.side-nav ul,.app-sidebar ul,.fc-sidebar ul{margin:0!important;padding:0!important;list-style:none!important;display:flex!important;flex-direction:column!important;gap:var(--fc-sidebar-gap)!important}
+@media(min-width:900px){.with-sidebar,.has-sidebar{margin-left:var(--fc-sidebar-width)!important}}
+@media(max-width:899px){aside,.sidebar,.side-nav,.app-sidebar,.fc-sidebar{width:100%!important;min-width:0!important;max-width:none!important;padding:12px 16px!important}.with-sidebar,.has-sidebar{margin-left:0!important}}
+
+
+/* ================================================================
+   FORTYCOOL DESIGN SYSTEM — SINGLE SOURCE OF TRUTH
+   The HTML pages are legacy static Tailwind documents. These rules are
+   intentionally explicit and last in the cascade so no page can drift.
+   ================================================================ */
+:root {
+  --fc-sidebar-width: 248px;
+  --fc-header-height: 64px;
+  --fc-font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --fc-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Typography: identical family and scale across every page. */
+html, body, body *, button, input, textarea, select, option {
+  font-family: var(--fc-font-sans) !important;
+}
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined" !important;
+  font-weight: normal !important;
+  font-style: normal !important;
+}
+.font-mono, code, pre, kbd, samp {
+  font-family: var(--fc-font-mono) !important;
+}
+
+.text-body-md, .font-body-md { font-size: 14px !important; line-height: 21px !important; font-weight: 400 !important; letter-spacing: 0 !important; }
+.text-body-lg, .font-body-lg { font-size: 16px !important; line-height: 26px !important; font-weight: 400 !important; letter-spacing: 0 !important; }
+.text-label-md, .font-label-md { font-size: 13px !important; line-height: 18px !important; font-weight: 500 !important; letter-spacing: .02em !important; }
+.text-label-sm, .font-label-sm { font-size: 11px !important; line-height: 15px !important; font-weight: 500 !important; letter-spacing: .05em !important; }
+.text-headline-sm, .font-headline-sm, .fc-section-title { font-size: 20px !important; line-height: 28px !important; font-weight: 600 !important; letter-spacing: -.02em !important; }
+.text-headline-md, .font-headline-md { font-size: 24px !important; line-height: 32px !important; font-weight: 600 !important; letter-spacing: -.02em !important; }
+.text-headline-lg, .font-headline-lg, .fc-page-title { font-size: 32px !important; line-height: 38px !important; font-weight: 600 !important; letter-spacing: -.03em !important; }
+.text-display, .font-display { font-size: 48px !important; line-height: 52px !important; font-weight: 700 !important; letter-spacing: -.05em !important; }
+.fc-brand { font-size: 20px !important; line-height: 28px !important; font-weight: 600 !important; letter-spacing: -.02em !important; color: rgb(var(--color-primary)) !important; }
+
+/* Exact same shell geometry on all five pages. */
+nav {
+  width: var(--fc-sidebar-width) !important;
+  min-width: var(--fc-sidebar-width) !important;
+  max-width: var(--fc-sidebar-width) !important;
+  height: 100vh !important;
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  box-sizing: border-box !important;
+  padding: 32px 16px 20px !important;
+  margin: 0 !important;
+  font-family: var(--fc-font-sans) !important;
+  z-index: 50 !important;
+}
+nav > div:first-child {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  margin-bottom: 32px !important;
+}
+nav > ul {
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 4px !important;
+}
+nav > ul > li { margin: 0 !important; padding: 0 !important; }
+nav a {
+  width: 100% !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 12px !important;
+  margin: 0 !important;
+  font-family: var(--fc-font-sans) !important;
+  font-size: 14px !important;
+  line-height: 20px !important;
+  font-weight: 500 !important;
+}
+nav a .text-label-md, nav a .font-label-md { font-size: 14px !important; line-height: 20px !important; letter-spacing: 0 !important; font-weight: 500 !important; }
+nav > div:last-child {
+  padding: 0 8px !important;
+  margin-top: auto !important;
+  padding-top: 32px !important;
+}
+nav > div:last-child .text-label-sm { font-size: 11px !important; line-height: 15px !important; }
+
+/* Main/header offsets must equal the sidebar exactly, not Tailwind's 256px w-64. */
+main.ml-\[248px\], main[class*="ml-[248px]"] { margin-left: var(--fc-sidebar-width) !important; }
+header.left-\[248px\], header[class*="left-[248px]"] { left: var(--fc-sidebar-width) !important; }
+header[class*="calc(100%-248px)"] { width: calc(100% - var(--fc-sidebar-width)) !important; }
+
+/* Shared top bar. */
+body > header, body > div > header {
+  height: var(--fc-header-height) !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 899px) {
+  nav { position: relative !important; width: 100% !important; min-width: 0 !important; max-width: none !important; height: auto !important; padding: 16px !important; }
+  main.ml-\[248px\], main[class*="ml-[248px]"] { margin-left: 0 !important; }
+  header.left-\[248px\], header[class*="left-[248px]"] { left: 0 !important; }
+  header[class*="calc(100%-248px)"] { width: 100% !important; }
+}
+
+/* Command Center chart titles: readable in both themes; never inherit accent-blue as text. */
+.fc-chart-heading {
+  color: rgb(var(--color-on-surface)) !important;
+}
+
+/* History page: keep the content inside the viewport and allow only the table
+   to scroll horizontally when genuinely necessary. */
+.history-page main {
+  min-width: 0 !important;
+  max-width: calc(100vw - var(--fc-sidebar-width)) !important;
+  box-sizing: border-box !important;
+}
+.history-page .history-table-wrap {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+.history-page .history-table {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+}
+.history-page .history-table th,
+.history-page .history-table td {
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+@media (max-width: 899px) {
+  .history-page main {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+}

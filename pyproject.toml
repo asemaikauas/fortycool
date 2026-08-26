@@ -26,6 +26,9 @@ fortycool = "fortycool_agents.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+fortycool_agents = ["web/**/*.html", "web/**/*.css", "web/**/*.js"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

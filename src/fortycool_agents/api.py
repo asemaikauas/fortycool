@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from .catalog import serialized_catalog
 from .copilot import CopilotError, CopilotUnavailableError, FortyCoolCopilot
@@ -38,6 +41,12 @@ discovery_agent = SiteDiscoveryAgent(
     orchestrator.provider,
     orchestrator.urban_provider,
 )
+web_root = Path(__file__).with_name("web")
+
+
+@app.get("/", include_in_schema=False)
+async def dashboard_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard/pages/site_setup.html")
 
 
 @app.get("/health")
@@ -228,3 +237,6 @@ async def get_evidence(run_id: str, evidence_id: str) -> dict:
     if evidence is None:
         raise HTTPException(status_code=404, detail="evidence not found")
     return evidence.model_dump(mode="json")
+
+
+app.mount("/dashboard", StaticFiles(directory=web_root, html=True), name="dashboard")

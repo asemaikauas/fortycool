@@ -8,6 +8,80 @@ from fortycool_agents.models import CopilotResponse
 client = TestClient(app)
 
 
+def test_integrated_dashboard_is_served_by_the_api() -> None:
+    redirect = client.get("/", follow_redirects=False)
+    page = client.get("/dashboard/pages/site_setup.html")
+    browser_client = client.get("/dashboard/js/api.js")
+
+    assert redirect.status_code == 307
+    assert redirect.headers["location"] == "/dashboard/pages/site_setup.html"
+    assert page.status_code == 200
+    assert "Northern Virginia Demo Campus" in page.text
+    assert "Uploaded BMS CSV" in page.text
+    assert browser_client.status_code == 200
+    assert 'request("/run-jobs"' in browser_client.text
+    assert '"completed_with_warnings"' in browser_client.text
+
+
+def test_dashboard_request_contract_produces_all_mvp_outputs() -> None:
+    payload = {
+        "site": {
+            "name": "Northern Virginia Demo Campus",
+            "latitude": 39.01,
+            "longitude": -77.46,
+            "timezone": "America/New_York",
+        },
+        "analysis_modes": ["thermal_drift", "operations_12h", "investment"],
+        "facility": {
+            "archetype": "colocation_water_cooled",
+            "it_capacity_mw": 10,
+            "reported_pue": 1.25,
+        },
+        "economics": {
+            "electricity_price_per_kwh": 0.08,
+            "horizon_years": 10,
+            "discount_rate": 0.08,
+        },
+        "telemetry": {"source": "simulated"},
+        "simulation": {
+            "enabled": True,
+            "seed": 42,
+            "history_days": 60,
+            "interval_minutes": 60,
+            "forecast_hours": 12,
+        },
+        "baseline_year": 2022,
+        "temperature_eligibility_threshold_c": 18,
+        "use_demo_defaults": True,
+    }
+
+    created = client.post("/run-jobs", json=payload)
+
+    assert created.status_code == 202
+    run_id = created.json()["run_id"]
+    run = client.get(f"/runs/{run_id}")
+    assert run.status_code == 200
+    body = run.json()
+    metric_ids = {item["id"] for item in body["metrics"]}
+    chart_ids = {item["id"] for item in body["charts"]}
+    assert {
+        "local_thermal_drift_c",
+        "local_drift_rate_c_per_year",
+        "temperature_eligible_hours_lost",
+        "forecast_savings_kwh",
+        "forecast_safety_margin_c",
+        "thermal_drift_npv",
+    } <= metric_ids
+    assert {
+        "thermal_drift_timeseries",
+        "temperature_forecast_12h",
+        "historical_day_backtest",
+        "baseline_vs_optimized",
+    } <= chart_ids
+    assert body["recommendations"]
+    assert body["evidence"]
+
+
 def test_health_and_tool_catalog() -> None:
     health = client.get("/health")
     tools = client.get("/tools")
