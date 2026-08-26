@@ -141,6 +141,36 @@
   });
   el("revertBtn").addEventListener("click", () => window.location.reload());
 
+  el("loadDemoBtn").addEventListener("click", async () => {
+    const button = el("loadDemoBtn");
+    button.disabled = true;
+    button.textContent = "VERIFYING SAVED RUN…";
+    try {
+      const demo = await FortyCoolAPI.getVerifiedDemo();
+      const runId = demo.run.run_id;
+      FortyCoolAPI.recordRunLocally(runId, {
+        site_name: "Verified ThermalDrift Evidence Demo",
+        telemetry_source: demo.operations_data_class || "not_available",
+        verified_demo: true,
+        verified_at: demo.verified_at,
+      });
+      localStorage.setItem(`fortycool_verified_demo_${runId}`, JSON.stringify({
+        verified_at: demo.verified_at,
+        saved_at: demo.saved_at,
+        thermal_years: demo.thermal_years,
+        observed_heatmap: demo.observed_heatmap,
+        operations_data_class: demo.operations_data_class,
+        verification_notes: demo.verification_notes,
+      }));
+      log(`[SYS] Verified saved run ${runId}: FortyGuard ${demo.thermal_years[0]}-${demo.thermal_years.at(-1)} + Dynamic World`, "text-status-observed");
+      window.location.href = `command_center.html?run_id=${encodeURIComponent(runId)}&verified=1`;
+    } catch (error) {
+      log(`[ERR] ${error.message}`, "text-safety-critical");
+      button.disabled = false;
+      button.innerHTML = '<span class="material-symbols-outlined text-[17px]">verified</span> LOAD VERIFIED THERMALDRIFT DEMO';
+    }
+  });
+
   el("analyzeBtn").addEventListener("click", async () => {
     const button = el("analyzeBtn");
     button.disabled = true;

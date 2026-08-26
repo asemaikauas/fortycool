@@ -23,6 +23,9 @@ def test_sqlite_repository_round_trips_analysis(tmp_path) -> None:
 
     repository.save(response)
     restored = repository.get(response.run_id)
+    recent = repository.list_recent(limit=10)
 
     assert restored is not None
     assert restored.model_dump(mode="json") == response.model_dump(mode="json")
+    assert len(recent) == 1
+    assert recent[0][1].run_id == response.run_id

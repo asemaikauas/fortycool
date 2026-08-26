@@ -50,3 +50,20 @@ class RunRepository:
         if row is None:
             return None
         return AnalysisResponse.model_validate_json(row[0])
+
+    def list_recent(self, *, limit: int = 100) -> list[tuple[str, AnalysisResponse]]:
+        bounded_limit = max(1, min(limit, 500))
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT created_at, response_json
+                FROM analysis_runs
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT ?
+                """,
+                (bounded_limit,),
+            ).fetchall()
+        return [
+            (created_at, AnalysisResponse.model_validate_json(payload))
+            for created_at, payload in rows
+        ]

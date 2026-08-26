@@ -6,4 +6,6 @@ __pycache__/
 *.py[cod]
 .fortycool-cache/
 .fortycool-data/
+output/pdf/*.pdf
+tmp/
 *.egg-info/

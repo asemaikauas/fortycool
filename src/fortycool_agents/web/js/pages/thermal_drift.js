@@ -65,6 +65,9 @@
       if (link.getAttribute("href").includes("site_setup")) return;
       const url = new URL(link.href);
       url.searchParams.set("run_id", runId);
+      if (new URLSearchParams(window.location.search).get("verified") === "1") {
+        url.searchParams.set("verified", "1");
+      }
       link.href = url.href;
     });
   }
@@ -75,6 +78,11 @@
       const run = await FortyCoolAPI.getRun(runId);
       const historyRecord = FortyCoolAPI.listLocalRuns().find((item) => item.run_id === runId);
       el("siteLabel").textContent = historyRecord?.site_name || "FortyCool Site Analysis";
+      const memoButton = el("downloadMemoBtn");
+      memoButton.href = FortyCoolAPI.memoUrl(runId);
+      memoButton.download = `fortycool-thermaldrift-${runId.slice(0, 8)}.pdf`;
+      memoButton.classList.remove("hidden");
+      memoButton.classList.add("inline-flex");
       const metrics = run.metricsById;
       const drift = metrics.local_thermal_drift_c;
       const driftRate = metrics.local_drift_rate_c_per_year;

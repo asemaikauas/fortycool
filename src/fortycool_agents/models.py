@@ -250,6 +250,16 @@ class AnalysisResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class VerifiedDemoResponse(BaseModel):
+    run: AnalysisResponse
+    saved_at: datetime
+    verified_at: datetime
+    thermal_years: list[int]
+    observed_heatmap: bool
+    operations_data_class: DataClass | None = None
+    verification_notes: list[str] = Field(default_factory=list)
+
+
 class TelemetryUpload(BaseModel):
     upload_id: str
     rows: int

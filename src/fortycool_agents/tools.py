@@ -106,6 +106,9 @@ def analyze_urban_context(context: RunContext, urban: UrbanContextDataset) -> No
     historical_control_stability_verified = bool(
         urban.metadata.get("historical_control_stability_verified")
     )
+    context.artifacts["historical_control_stability_verified"] = (
+        historical_control_stability_verified
+    )
     land_cover_provider = str(
         urban.metadata.get("land_cover_provider", "fortyguard_satellite_segmentation")
     )

@@ -279,16 +279,48 @@
       if (link.getAttribute("href").includes("site_setup")) return;
       const url = new URL(link.href);
       url.searchParams.set("run_id", runId);
+      if (params.get("verified") === "1") url.searchParams.set("verified", "1");
       link.href = url.href;
     });
+  }
+
+  function renderRunActions(run, historyRecord) {
+    const memoButton = el("downloadMemoBtn");
+    memoButton.href = FortyCoolAPI.memoUrl(run.run_id);
+    memoButton.download = `fortycool-thermaldrift-${run.run_id.slice(0, 8)}.pdf`;
+    memoButton.classList.remove("hidden");
+    memoButton.classList.add("inline-flex");
+
+    const manifestKey = `fortycool_verified_demo_${run.run_id}`;
+    let manifest = null;
+    try {
+      manifest = JSON.parse(localStorage.getItem(manifestKey) || "null");
+    } catch (_) {
+      // A malformed local marker must not prevent a saved run from loading.
+    }
+    const isVerifiedDemo = params.get("verified") === "1" || historyRecord?.verified_demo === true;
+    if (!isVerifiedDemo) return;
+    const badge = el("verifiedDemoBadge");
+    badge.classList.remove("hidden");
+    const years = manifest?.thermal_years;
+    badge.textContent = years?.length
+      ? `VERIFIED FORTYGUARD ${years[0]}-${years[years.length - 1]}`
+      : "VERIFIED SAVED RUN";
+    badge.title = (manifest?.verification_notes || [
+      "This badge identifies a previously completed run that passed the backend evidence gates.",
+    ]).join(" ");
   }
 
   async function loadFinalRun() {
     const run = await FortyCoolAPI.getRun(runId);
     runReady = true;
-    el("runStatusBadge").textContent = `${humanize(run.status)} · ${humanize(run.confidence_tier)} · ${run.warnings.length} warnings`;
     const historyRecord = FortyCoolAPI.listLocalRuns().find((item) => item.run_id === runId);
+    const savedLabel = params.get("verified") === "1" || historyRecord?.verified_demo
+      ? "Saved verified demo · "
+      : "";
+    el("runStatusBadge").textContent = `${savedLabel}${humanize(run.status)} · ${humanize(run.confidence_tier)} · ${run.warnings.length} warnings`;
     el("siteName").textContent = historyRecord?.site_name || "FortyCool Site Analysis";
+    renderRunActions(run, historyRecord);
     run.trace.forEach(appendTraceStep);
     renderKpis(run);
     renderMap(run);

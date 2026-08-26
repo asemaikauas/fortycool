@@ -69,6 +69,7 @@ const FortyCoolAPI = (() => {
   const analysisResponseSchema = () => request("/schemas/analysis-response");
   const discoveryCatalog = () => request("/discovery/catalog");
   const runSiteDiscovery = (payload = {}) => request("/agent-tools/site-discovery", { method: "POST", body: payload });
+  const getVerifiedDemo = () => request("/demo/verified-run");
 
   const startRun = (analysisRequest) => request("/run-jobs", { method: "POST", body: analysisRequest });
   const getRunJobStatus = (runId) => request(`/run-jobs/${encodeURIComponent(runId)}`);
@@ -77,6 +78,7 @@ const FortyCoolAPI = (() => {
   const getRunEvents = (runId) => request(`/runs/${encodeURIComponent(runId)}/events`);
   const getEvidence = (runId, evidenceId) =>
     request(`/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(evidenceId)}`);
+  const memoUrl = (runId) => `${BASE_URL}/runs/${encodeURIComponent(runId)}/memo.pdf`;
   const askCopilot = (runId, question, audience = "operator") =>
     request(`/runs/${encodeURIComponent(runId)}/copilot`, {
       method: "POST",
@@ -122,12 +124,14 @@ const FortyCoolAPI = (() => {
     analysisResponseSchema,
     discoveryCatalog,
     runSiteDiscovery,
+    getVerifiedDemo,
     startRun,
     getRunJobStatus,
     streamRunJob,
     getRun,
     getRunEvents,
     getEvidence,
+    memoUrl,
     askCopilot,
     runThermalDrift,
     runOperations12h,

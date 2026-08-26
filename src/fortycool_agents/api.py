@@ -8,9 +8,11 @@ from fastapi.staticfiles import StaticFiles
 
 from .catalog import serialized_catalog
 from .copilot import CopilotError, CopilotUnavailableError, FortyCoolCopilot
+from .demo import latest_verified_demo
 from .discovery import SiteDiscoveryAgent
 from .discovery_catalog import public_catalog
 from .jobs import RunJobManager
+from .memo import build_investment_memo
 from .models import (
     AnalysisMode,
     AnalysisRequest,
@@ -21,6 +23,7 @@ from .models import (
     DiscoveryResponse,
     RunJobStatus,
     TelemetryUpload,
+    VerifiedDemoResponse,
 )
 from .orchestrator import FortyCoolOrchestrator
 from .storage import RunRepository
@@ -98,6 +101,20 @@ async def discovery_response_schema() -> dict:
 @app.get("/discovery/catalog")
 async def discovery_catalog() -> list[dict]:
     return [candidate.model_dump(mode="json") for candidate in public_catalog()]
+
+
+@app.get("/demo/verified-run", response_model=VerifiedDemoResponse)
+async def verified_demo_run() -> VerifiedDemoResponse:
+    demo = latest_verified_demo(run_repository)
+    if demo is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "no completed run passed the FortyGuard history, Dynamic World history, "
+                "and no-backcast verification gates"
+            ),
+        )
+    return demo
 
 
 @app.post("/agent-tools/site-discovery", response_model=DiscoveryResponse)
@@ -203,6 +220,27 @@ async def get_run(run_id: str) -> AnalysisResponse:
     if response is None:
         raise HTTPException(status_code=404, detail="run not found")
     return response
+
+
+@app.get("/runs/{run_id}/memo.pdf")
+async def get_investment_memo(run_id: str, request: Request) -> Response:
+    response = run_repository.get(run_id)
+    if response is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    pdf = build_investment_memo(
+        response,
+        base_url=str(request.base_url).rstrip("/"),
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="fortycool-thermaldrift-{run_id[:8]}.pdf"'
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.post("/runs/{run_id}/copilot", response_model=CopilotResponse)

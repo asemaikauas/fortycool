@@ -34,6 +34,8 @@ simulated unless the operator uploads facility telemetry.
 - Twelve hourly FortyGuard forecast calls with bounded concurrency and per-activity evidence
 - Historical `tcm` and below-threshold `exceedance` screening with explicit coverage fallbacks
 - GPT-4o copilot answers grounded in completed-run metrics, warnings, and evidence IDs
+- A downloadable, evidence-linked ThermalDrift investment memorandum in PDF format
+- A verified saved-demo selector with strict FortyGuard, Dynamic World, and no-backcast gates
 
 ## Data integrity
 
@@ -88,11 +90,13 @@ GET  /schemas/copilot-response
 GET  /schemas/discovery-request
 GET  /schemas/discovery-response
 GET  /discovery/catalog
+GET  /demo/verified-run
 POST /runs
 POST /run-jobs
 GET  /run-jobs/{run_id}
 GET  /run-jobs/{run_id}/stream
 GET  /runs/{run_id}
+GET  /runs/{run_id}/memo.pdf
 POST /runs/{run_id}/copilot
 GET  /runs/{run_id}/events
 GET  /runs/{run_id}/evidence/{evidence_id}
@@ -148,6 +152,31 @@ The stream uses standard `text/event-stream` messages named `trace` and `termina
 responses are saved to SQLite and remain available through `GET /runs/{run_id}` after a service
 restart. Set `FORTYCOOL_DB_PATH` to choose the database location; the default is
 `.fortycool-data/runs.sqlite3`.
+
+### Verified demo and investment memorandum
+
+Site Setup includes **Load Verified ThermalDrift Demo**. The action does not fabricate a result or
+silently make a new provider request. It selects a persisted completed run only when all of these
+backend gates pass:
+
+- annual FortyGuard heatmap evidence contains at least three consecutive observed years;
+- the FortyGuard evidence contains no calibrated backcast years;
+- observed Google Dynamic World history is present; and
+- the Dynamic World record confirms historical coverage for the selected controls;
+- the regional-control similarity gate is accepted and those controls are used in the FortyGuard
+  history; and
+- the drift and local-buildout metrics link directly to the qualifying provider evidence.
+
+The returned manifest discloses whether the saved run contains an observed forecast heatmap and the
+data class of its 12-hour operational series. A saved demo may therefore have verified real
+ThermalDrift inputs while its BMS, forecast, and optimization panels remain visibly simulated or
+inferred.
+
+Every persisted run can be exported at `GET /runs/{run_id}/memo.pdf`. The deterministic memo includes
+the difference-in-differences conclusion, investment metrics, annual thermal and land-cover tables,
+assumptions, warnings, operational data classes, and an evidence appendix. Metric evidence IDs link
+back to the run's immutable evidence endpoints. The report is an advisory screening deliverable, not
+an engineering design or valuation opinion.
 
 ## Uploaded telemetry
 

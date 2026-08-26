@@ -144,6 +144,37 @@ def test_run_can_be_retrieved_with_evidence() -> None:
     assert evidence.json()["id"] == evidence_id
 
 
+def test_investment_memo_is_a_downloadable_pdf() -> None:
+    payload = {
+        "site": {
+            "name": "Memo Demo",
+            "latitude": 39.01,
+            "longitude": -77.46,
+        },
+        "analysis_modes": ["thermal_drift", "operations_12h", "investment"],
+        "simulation": {"enabled": True, "seed": 31},
+    }
+    created = client.post("/runs", json=payload)
+    run_id = created.json()["run_id"]
+
+    memo = client.get(f"/runs/{run_id}/memo.pdf")
+
+    assert memo.status_code == 200
+    assert memo.headers["content-type"] == "application/pdf"
+    assert f"fortycool-thermaldrift-{run_id[:8]}.pdf" in memo.headers[
+        "content-disposition"
+    ]
+    assert memo.content.startswith(b"%PDF-")
+    assert memo.content.rstrip().endswith(b"%%EOF")
+    assert len(memo.content) > 5_000
+
+
+def test_missing_run_memo_returns_not_found() -> None:
+    response = client.get("/runs/does-not-exist/memo.pdf")
+
+    assert response.status_code == 404
+
+
 def test_background_job_exposes_trace_stream_and_persists_result() -> None:
     payload = {
         "site": {

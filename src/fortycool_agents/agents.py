@@ -72,7 +72,14 @@ class TemperatureIntelligenceAgent:
             seed=context.request.simulation.seed,
             controls=context.artifacts.get("matched_control_sites"),
         )
-        context.warnings.extend(annual.warnings)
+        annual_warnings = list(annual.warnings)
+        if context.artifacts.get("historical_control_stability_verified"):
+            stale_warning = (
+                "Historical regional controls were selected using current satellite land-cover "
+                "similarity; their historical land-cover stability is not yet verified."
+            )
+            annual_warnings = [warning for warning in annual_warnings if warning != stale_warning]
+        context.warnings.extend(annual_warnings)
         analyze_thermal_drift(context, annual)
 
 
