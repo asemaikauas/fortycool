@@ -4,7 +4,14 @@ from datetime import datetime, timedelta, timezone
 
 from .context import RunContext
 from .modeling import train_and_backtest
-from .models import AnalysisMode, Chart, DataClass, EvidenceRef, TelemetrySource
+from .models import (
+    AnalysisMode,
+    Chart,
+    DataClass,
+    EvidenceRef,
+    TelemetrySource,
+    WarningCode,
+)
 from .providers.fixture import ThermalDataProvider
 from .providers.urban import UrbanContextProvider
 from .simulation import enrich_uploaded_bms, make_forecast_operating_frame, simulate_bms
@@ -67,7 +74,7 @@ class TemperatureIntelligenceAgent:
         annual = await self.provider.annual_history(
             context.request.site,
             context.request.baseline_year,
-            2026,
+            self.provider.reference_time().year,
             context.request.temperature_eligibility_threshold_c,
             seed=context.request.simulation.seed,
             controls=context.artifacts.get("matched_control_sites"),
@@ -84,8 +91,18 @@ class TemperatureIntelligenceAgent:
 
 
 class UrbanChangeAgent:
-    def __init__(self, provider: UrbanContextProvider) -> None:
+    def __init__(
+        self,
+        provider: UrbanContextProvider,
+        thermal_provider: ThermalDataProvider | None = None,
+    ) -> None:
         self.provider = provider
+        self.thermal_provider = thermal_provider
+
+    def _end_year(self) -> int:
+        if self.thermal_provider is not None:
+            return self.thermal_provider.reference_time().year
+        return datetime.now(timezone.utc).year
 
     async def run(self, context: RunContext) -> None:
         modes = set(context.request.analysis_modes)
@@ -95,14 +112,16 @@ class UrbanChangeAgent:
             urban = await self.provider.analyze(
                 context.request.site,
                 context.request.baseline_year,
-                2026,
+                self._end_year(),
                 seed=context.request.simulation.seed,
             )
         except Exception as exc:
-            context.warnings.append(
+            context.warn(
                 "Satellite context was unavailable; thermal drift continues with the "
-                f"provider's local control method ({type(exc).__name__})."
+                f"provider's local control method ({type(exc).__name__}).",
+                WarningCode.SATELLITE_STAGE_UNAVAILABLE,
             )
+            context.mark_stage_degraded("satellite_land_cover")
             context.event(
                 "urban_change_agent",
                 "Could not retrieve satellite context or select regional controls",
@@ -128,9 +147,10 @@ class AssetModelingAgent:
             context.request.telemetry.source == TelemetrySource.SIMULATED
             and not context.request.simulation.enabled
         ):
-            context.warnings.append(
+            context.warn(
                 "Uploaded/live BMS ingestion is not configured; enable simulation for this milestone"
             )
+            context.mark_stage_degraded("operations_model")
             context.event(
                 "asset_modeling_agent",
                 "Could not build operational model because no telemetry source was configured",
@@ -146,7 +166,11 @@ class AssetModelingAgent:
                     str(context.request.telemetry.upload_id)
                 )
             except KeyError:
-                context.warnings.append("Uploaded telemetry was not found or expired")
+                context.warn(
+                    "Uploaded telemetry was not found or expired",
+                    WarningCode.TELEMETRY_NOT_FOUND,
+                )
+                context.mark_stage_degraded("uploaded_telemetry")
                 context.event(
                     "asset_modeling_agent",
                     "Could not load the requested telemetry upload",
@@ -158,7 +182,11 @@ class AssetModelingAgent:
                 hours=1
             )
         else:
-            reference_end = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
+            # Anchored to the provider's own clock so the training window and
+            # the forecast window cannot drift apart.
+            reference_end = self.provider.reference_time().replace(
+                minute=0, second=0, microsecond=0
+            )
             reference_start = reference_end - timedelta(
                 days=context.request.simulation.history_days
             )
@@ -263,11 +291,23 @@ class AssetModelingAgent:
                 "Reproducible simulated BMS telemetry driven by thermal inputs"
             )
         else:
-            history, enrichment_warnings = enrich_uploaded_bms(
+            enrichment = enrich_uploaded_bms(
                 uploaded, history_thermal, context.request.facility
             )
-            context.warnings.extend(enrichment_warnings)
-            telemetry_data_class = DataClass.UPLOADED
+            history = enrichment.frame
+            for warning in enrichment.warnings:
+                context.warn(warning)
+            # Values the service invented to close a gap are inferred, not
+            # measured, and the evidence label has to say so.
+            if enrichment.values_were_invented:
+                telemetry_data_class = DataClass.INFERRED
+                context.warn(
+                    "Uploaded telemetry required interpolation, so the BMS evidence is "
+                    "labelled inferred rather than uploaded.",
+                    WarningCode.TELEMETRY_INTERPOLATED,
+                )
+            else:
+                telemetry_data_class = DataClass.UPLOADED
             bms_source = f"upload://{context.request.telemetry.upload_id}"
             bms_description = (
                 "Validated user-uploaded BMS telemetry enriched with thermal inputs"
@@ -280,8 +320,17 @@ class AssetModelingAgent:
         )
         if uploaded is not None:
             recent_load = history["it_load_kw"].tail(len(forecast)).to_numpy()
-            if len(recent_load) == len(forecast):
-                forecast["it_load_kw"] = recent_load
+            # `tail` cannot return fewer rows than the forecast horizon here
+            # (history is at least 336 rows, the horizon at most 12), so the old
+            # `if` never failed. Assert the invariant instead of silently
+            # falling through to the simulator's synthetic load, which would be
+            # computed from the default 24 MW capacity rather than this site's.
+            if len(recent_load) != len(forecast):
+                raise ValueError(
+                    "uploaded history is shorter than the forecast horizon; cannot "
+                    "project the site's own load"
+                )
+            forecast["it_load_kw"] = recent_load
         bms_evidence = context.add_evidence(
             EvidenceRef(
                 id=f"bms-telemetry-{context.run_id}",
@@ -343,8 +392,9 @@ class EvidenceAndSafetyAgent:
             elif any(item not in evidence_ids for item in recommendation.evidence_ids):
                 missing.append(recommendation.id)
         if missing:
-            context.warnings.append(
-                "Evidence verification failed for: " + ", ".join(sorted(set(missing)))
+            context.warn(
+                "Evidence verification failed for: " + ", ".join(sorted(set(missing))),
+                WarningCode.EVIDENCE_VERIFICATION_FAILED,
             )
             context.event(
                 "evidence_and_safety_agent",

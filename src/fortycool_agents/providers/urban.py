@@ -313,6 +313,9 @@ class FixtureUrbanProvider:
                 "control_quality_passed": control_quality_passed,
                 "historical_control_stability_verified": True,
                 "annual_land_cover_series": annual_land_cover_series,
+                # Straight-line fill between two snapshots. Anything that
+                # correlates against this series is measuring the interpolation.
+                "annual_land_cover_series_basis": "interpolated_two_snapshots",
                 "complete_history_years": list(range(baseline_year, end_year + 1)),
                 "land_cover_provider": "fixture_dynamic_world_shaped",
             },
