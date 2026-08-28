@@ -1,0 +1,52 @@
+# Render Blueprint. Connect this repository in the Render dashboard and it reads
+# this file, so nothing has to be typed into a form and nothing can be mistyped.
+#
+# Deliberate choices, each one a thing that breaks a first deploy:
+#
+#   * --host 0.0.0.0. Binding 127.0.0.1 works locally and makes the container
+#     unreachable, which presents as a health check that never passes.
+#   * --workers 1. `telemetry_store` and `job_manager` are per-process, so with
+#     two workers an upload can land on one and its run on another, and the
+#     analysis then proceeds silently on simulated data instead of the
+#     customer's telemetry. That is a wrong answer, not an error.
+#   * FORTYCOOL_TRUSTED_PROXY_HOPS=1. Render terminates TLS at its own proxy, so
+#     without this every visitor shares one rate-limit bucket and a single
+#     abuser locks out the whole demo.
+#   * No provider keys. This service is public and unauthenticated by design for
+#     a demo; adding OPENAI_API_KEY here publishes the copilot endpoint to
+#     anyone who finds the URL.
+
+services:
+  - type: web
+    name: fortycool
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: |
+      python -m pip install --upgrade pip setuptools wheel
+      python -m pip install .
+    startCommand: python -m uvicorn fortycool_agents.api:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # One proxy in front of us: Render's own.
+      - key: FORTYCOOL_TRUSTED_PROXY_HOPS
+        value: "1"
+      # The free plan has no persistent disk, so the run store is ephemeral and
+      # resets on every restart. Keep it on the writable scratch path rather
+      # than a repo-relative one that may be read-only.
+      - key: FORTYCOOL_DB_PATH
+        value: /tmp/fortycool/runs.sqlite3
+      # Fixture provider: no upstream credentials, nothing to bill.
+      - key: FORTYCOOL_THERMAL_PROVIDER
+        value: fixture
+      - key: FORTYCOOL_URBAN_PROVIDER
+        value: fixture
+      # Tighter than the local defaults, because this URL is public and the
+      # free instance is small.
+      - key: FORTYCOOL_RATE_LIMIT_ANALYSIS
+        value: "10"
+      - key: FORTYCOOL_RATE_LIMIT_UPLOAD
+        value: "5"

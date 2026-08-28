@@ -260,6 +260,32 @@ shortlist of one, because a full request costs roughly ninety paid upstream acti
 upload can land on one worker and its run on another, and the analysis then proceeds silently on
 simulated data instead of the customer's telemetry, which is a wrong answer rather than an error.
 
+## Deploying
+
+`render.yaml` is a Render Blueprint: connect the repository and Render reads the
+service definition from it, so nothing is typed into a form and nothing is
+mistyped. `Dockerfile` is the portable equivalent for Railway, Fly, or any
+container host.
+
+Four settings in there are not cosmetic, and each one is a way a first deploy
+fails:
+
+- `--host 0.0.0.0`. Binding loopback works locally and makes the service
+  unreachable inside a container, which presents as a health check that never
+  passes rather than as an obvious error.
+- `--workers 1`. The telemetry and job stores are per-process, so a second
+  worker can receive a run whose upload landed on the first, and the analysis
+  then continues on simulated data instead of the operator's telemetry.
+- `FORTYCOOL_TRUSTED_PROXY_HOPS=1`. The platform terminates TLS at its own
+  proxy, so without this every visitor shares one rate-limit bucket.
+- No provider keys. A public deployment with `OPENAI_API_KEY` set publishes the
+  copilot endpoint to anyone who finds the URL.
+
+On a free plan there is no persistent disk, so `FORTYCOOL_DB_PATH` points at
+scratch space and the run store resets whenever the instance restarts. Saved
+runs and `/demo/verified-run` do not survive a restart there; mount a volume at
+that path if you need them to.
+
 ## Continuous integration
 
 `.github/workflows/tests.yml` runs the suite on every push and pull request across Python 3.11,

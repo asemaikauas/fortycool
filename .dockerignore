@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+.fortycool-data
+.fortycool-cache
+.pytest_cache
+**/__pycache__
+*.egg-info
+tests
+tmp
+output
+requirements.lock
