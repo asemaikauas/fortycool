@@ -11,6 +11,7 @@ from .models import (
     Metric,
     Recommendation,
     TraceEvent,
+    WarningCode,
 )
 
 
@@ -25,6 +26,8 @@ class RunContext:
     trace: list[TraceEvent] = field(default_factory=list)
     assumptions: list[Assumption] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    warning_codes: list[str] = field(default_factory=list)
+    degraded_stages: list[str] = field(default_factory=list)
     artifacts: dict[str, Any] = field(default_factory=dict)
     event_sink: Callable[[TraceEvent], None] | None = None
 
@@ -32,6 +35,23 @@ class RunContext:
         if not any(item.id == evidence.id for item in self.evidence):
             self.evidence.append(evidence)
         return evidence.id
+
+    def warn(self, message: str, code: WarningCode | None = None) -> None:
+        """Record a human-readable warning and, when it matters, a stable code.
+
+        Callers that need to branch on a caveat read `warning_codes`; rewording
+        a sentence must never change program behaviour.
+        """
+
+        self.warnings.append(message)
+        if code is not None and code.value not in self.warning_codes:
+            self.warning_codes.append(code.value)
+
+    def mark_stage_degraded(self, stage: str) -> None:
+        """Record that a pipeline stage did not produce its normal output."""
+
+        if stage not in self.degraded_stages:
+            self.degraded_stages.append(stage)
 
     def event(
         self,
