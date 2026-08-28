@@ -218,8 +218,21 @@ on. Authentication is opt-in so a local checkout still runs keyless:
 | `FORTYCOOL_MAX_UPLOADS` / `FORTYCOOL_UPLOAD_TTL_SECONDS` | 32 / 3600 | Telemetry retention |
 | `FORTYCOOL_MAX_JOBS` / `FORTYCOOL_JOB_TTL_SECONDS` | 256 / 3600 | Job retention |
 | `FORTYCOOL_MAX_RETAINED_RUNS` | 2000 | Rows kept in the SQLite run store |
+| `FORTYCOOL_GLOBAL_LIMIT_ANALYSIS` | 60 | Analysis requests per window, all callers combined |
+| `FORTYCOOL_GLOBAL_LIMIT_COPILOT` | 30 | Copilot requests per window, all callers combined |
+| `FORTYCOOL_GLOBAL_LIMIT_UPLOAD` | 30 | Telemetry writes per window, all callers combined |
+| `FORTYCOOL_GLOBAL_LIMIT_READ` | 1200 | Reads per window, all callers combined |
 | `FORTYCOOL_TRUSTED_PROXY_HOPS` | 0 | Proxies in front of the service; see below |
 | `FORTYCOOL_ENABLE_DOCS` | unset | Serves `/docs`, `/redoc`, `/openapi.json` |
+
+**Per-caller limits are fairness. The global ceiling is the protection.** Any
+identity derived from a request header is something the caller can write.
+Measured against the deployed service on Render: fifteen requests, each with a
+different forged `X-Forwarded-For`, all passed a per-caller limit of ten. The
+`FORTYCOOL_GLOBAL_LIMIT_*` allowances ignore identity entirely, so no header
+gets around them, and they are what bounds what the service will do for the
+internet. Set the per-caller limits so honest users are never affected and the
+global ones so a flood is.
 
 **Behind a proxy, set `FORTYCOOL_TRUSTED_PROXY_HOPS`.** Every request through a
 tunnel or load balancer arrives from the proxy's own address, so per-caller rate

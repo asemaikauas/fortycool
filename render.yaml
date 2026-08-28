@@ -50,3 +50,14 @@ services:
         value: "10"
       - key: FORTYCOOL_RATE_LIMIT_UPLOAD
         value: "5"
+      # The ceiling that actually holds. Per-caller identity comes from a
+      # request header here, and a header is something the caller writes:
+      # measured against this deployment, fifteen requests with fifteen forged
+      # addresses all passed a per-caller limit of ten. These totals ignore
+      # identity, so nothing anyone sends gets around them.
+      - key: FORTYCOOL_GLOBAL_LIMIT_ANALYSIS
+        value: "40"
+      - key: FORTYCOOL_GLOBAL_LIMIT_UPLOAD
+        value: "20"
+      - key: FORTYCOOL_GLOBAL_LIMIT_COPILOT
+        value: "20"

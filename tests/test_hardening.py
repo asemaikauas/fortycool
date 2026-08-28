@@ -694,3 +694,43 @@ def test_forged_forwarded_headers_cannot_buy_a_fresh_rate_limit_bucket() -> None
 
     # No header at all falls back to the peer rather than failing open.
     assert security.client_address(make({}), trusted_hops=2) == "203.0.113.9"
+
+
+def test_a_global_ceiling_holds_when_caller_identity_is_forged(
+    client: TestClient, monkeypatch
+) -> None:
+    """Per-caller limits are fairness; the global ceiling is the protection.
+
+    Measured against the deployed service: fifteen requests each carrying a
+    different forged X-Forwarded-For all passed a per-caller limit of ten,
+    because the entry the process reads is one the caller can write. A ceiling
+    that ignores identity cannot be escaped that way.
+    """
+
+    monkeypatch.setattr(security, "TRUSTED_PROXY_HOPS", 1)
+    tight = security.RateLimitRule(
+        name="analysis", limit=100, window_seconds=60, global_limit=3
+    )
+    guard = security._guard(tight)
+
+    from starlette.datastructures import Headers
+    from starlette.requests import Request
+
+    def caller(address: str) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "headers": Headers({"x-forwarded-for": address}).raw,
+                "client": ("10.0.0.1", 5000),
+            }
+        )
+
+    # Three different "callers" exhaust the shared ceiling even though each one
+    # is far below its own generous per-caller allowance.
+    for index in range(3):
+        guard(caller(f"203.0.113.{index}"))
+    with pytest.raises(Exception) as excinfo:
+        guard(caller("203.0.113.99"))
+    assert "429" in str(getattr(excinfo.value, "status_code", "")) or \
+        getattr(excinfo.value, "status_code", None) == 429
+    assert "total" in str(getattr(excinfo.value, "detail", "")).lower()

@@ -72,6 +72,15 @@ def verify_api_key(request: Request) -> None:
         )
 
 
+# Identity taken from a request header is a fairness mechanism, never a security
+# control: measured against the deployed service, fifteen requests each carrying
+# a different forged X-Forwarded-For all passed a limit of ten, because the
+# entry this process reads is one the caller can write. The global ceiling below
+# is what actually bounds the service, because it ignores identity entirely and
+# there is no header anyone can send to escape it.
+GLOBAL_KEY = "*all-callers*"
+
+
 @dataclass
 class RateLimitRule:
     """A sliding-window allowance, named so the error can explain itself."""
@@ -79,9 +88,14 @@ class RateLimitRule:
     name: str
     limit: int
     window_seconds: float
+    # Ceiling across every caller combined. `None` means no global ceiling.
+    global_limit: int | None = None
 
     def describe(self) -> str:
         return f"{self.limit} requests per {int(self.window_seconds)}s"
+
+    def describe_global(self) -> str:
+        return f"{self.global_limit} requests per {int(self.window_seconds)}s in total"
 
 
 @dataclass
@@ -167,31 +181,49 @@ def caller_identity(request: Request) -> str:
 rate_limiter = SlidingWindowRateLimiter()
 
 # Expensive routes call out to paid APIs; cheap routes only touch local state.
+_WINDOW = float(os.getenv("FORTYCOOL_RATE_WINDOW_SECONDS", 60))
+
 EXPENSIVE_RULE = RateLimitRule(
     name="analysis",
     limit=int(os.getenv("FORTYCOOL_RATE_LIMIT_ANALYSIS", 20)),
-    window_seconds=float(os.getenv("FORTYCOOL_RATE_WINDOW_SECONDS", 60)),
+    window_seconds=_WINDOW,
+    global_limit=int(os.getenv("FORTYCOOL_GLOBAL_LIMIT_ANALYSIS", 60)),
 )
 COPILOT_RULE = RateLimitRule(
     name="copilot",
     limit=int(os.getenv("FORTYCOOL_RATE_LIMIT_COPILOT", 10)),
-    window_seconds=float(os.getenv("FORTYCOOL_RATE_WINDOW_SECONDS", 60)),
+    window_seconds=_WINDOW,
+    # The one that bills a model provider, so the total is deliberately tight.
+    global_limit=int(os.getenv("FORTYCOOL_GLOBAL_LIMIT_COPILOT", 30)),
 )
 UPLOAD_RULE = RateLimitRule(
     name="upload",
     limit=int(os.getenv("FORTYCOOL_RATE_LIMIT_UPLOAD", 10)),
-    window_seconds=float(os.getenv("FORTYCOOL_RATE_WINDOW_SECONDS", 60)),
+    window_seconds=_WINDOW,
+    global_limit=int(os.getenv("FORTYCOOL_GLOBAL_LIMIT_UPLOAD", 30)),
 )
 READ_RULE = RateLimitRule(
     name="read",
     limit=int(os.getenv("FORTYCOOL_RATE_LIMIT_READ", 240)),
-    window_seconds=float(os.getenv("FORTYCOOL_RATE_WINDOW_SECONDS", 60)),
+    window_seconds=_WINDOW,
+    global_limit=int(os.getenv("FORTYCOOL_GLOBAL_LIMIT_READ", 1200)),
 )
 
 
 def _guard(rule: RateLimitRule):
     def dependency(request: Request) -> None:
         verify_api_key(request)
+        # Global first. Per-caller identity can be forged behind a proxy, so the
+        # allowance that has to hold is the one that does not depend on it.
+        if rule.global_limit is not None:
+            rate_limiter.check(
+                GLOBAL_KEY,
+                RateLimitRule(
+                    name=f"{rule.name}-total",
+                    limit=rule.global_limit,
+                    window_seconds=rule.window_seconds,
+                ),
+            )
         rate_limiter.check(caller_identity(request), rule)
 
     return dependency
