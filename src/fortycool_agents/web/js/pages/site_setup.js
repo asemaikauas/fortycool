@@ -36,6 +36,20 @@
       el("syncLabel").innerHTML = `<span class="material-symbols-outlined text-[14px]">satellite_alt</span> ${FortyCoolAPI.escapeHTML(health.thermal_provider)} + ${FortyCoolAPI.escapeHTML(health.urban_provider)}`;
       log(`[SYS] Providers: ${health.thermal_provider} / ${health.urban_provider}`, "text-status-observed");
       log(`[SYS] Copilot: ${health.copilot} (${health.copilot_model})`);
+      if (health.provider_error) {
+        log(`[WARN] Provider configuration failed: ${health.provider_error}`, "text-safety-warning");
+      }
+      // Say it on the screen, before anyone runs anything. In fixture mode the
+      // annual series is a fixed synthetic trend that never reads the entered
+      // coordinates, so the headline figures are identical for every site.
+      if (String(health.thermal_provider).startsWith("Fixture")) {
+        const banner = el("fixtureModeBanner");
+        if (banner) banner.classList.remove("hidden");
+        log(
+          "[SYS] Fixture mode: thermal history is a fixed demo series and does not depend on the coordinates you enter.",
+          "text-status-simulated"
+        );
+      }
     } catch (error) {
       el("syncLabel").textContent = "Backend unavailable";
       log(`[ERR] ${error.message}`, "text-safety-critical");
@@ -151,21 +165,23 @@
       FortyCoolAPI.recordRunLocally(runId, {
         site_name: "Verified ThermalDrift Evidence Demo",
         telemetry_source: demo.operations_data_class || "not_available",
-        verified_demo: true,
-        verified_at: demo.verified_at,
       });
-      localStorage.setItem(`fortycool_verified_demo_${runId}`, JSON.stringify({
-        verified_at: demo.verified_at,
-        saved_at: demo.saved_at,
-        thermal_years: demo.thermal_years,
-        observed_heatmap: demo.observed_heatmap,
-        operations_data_class: demo.operations_data_class,
-        verification_notes: demo.verification_notes,
-      }));
       log(`[SYS] Verified saved run ${runId}: FortyGuard ${demo.thermal_years[0]}-${demo.thermal_years.at(-1)} + Dynamic World`, "text-status-observed");
-      window.location.href = `command_center.html?run_id=${encodeURIComponent(runId)}&verified=1`;
+      // No `verified` flag in the URL. The command centre asks the server
+      // whether this specific run passed the gates.
+      window.location.href = `command_center.html?run_id=${encodeURIComponent(runId)}`;
     } catch (error) {
-      log(`[ERR] ${error.message}`, "text-safety-critical");
+      // A fresh deployment has no stored verified run: the qualifying run is
+      // produced by a live keyed analysis and lives in the gitignored local
+      // database, so a clean clone always answers 404 here. Say that plainly
+      // instead of printing a raw HTTP error.
+      const missing = /returned 404/.test(error.message);
+      log(
+        missing
+          ? "[SYS] No verified run is stored on this deployment. A verified run is created by a live analysis with FortyGuard and Earth Engine credentials; the local database that holds it is not committed to the repository."
+          : `[ERR] ${error.message}`,
+        missing ? "text-safety-warning" : "text-safety-critical"
+      );
       button.disabled = false;
       button.innerHTML = '<span class="material-symbols-outlined text-[17px]">verified</span> LOAD VERIFIED THERMALDRIFT DEMO';
     }

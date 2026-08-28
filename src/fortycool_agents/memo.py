@@ -68,13 +68,34 @@ def _format_number(value: object, decimals: int = 3) -> str:
     return f"{number:,.{decimals}f}".rstrip("0").rstrip(".")
 
 
-def _metric_value(metric: Metric | None) -> str:
+def _metric_value(metric: Metric | None, *, with_interval: bool = True) -> str:
+    """Render a metric, carrying its interval wherever one exists.
+
+    A bounded estimate printed as a bare point value is the single most
+    misleading thing this memo can do, so the bound travels with the number.
+    """
+
     if metric is None:
         return "Not available"
-    value = _format_number(metric.value)
     if metric.unit == "USD NPV":
-        return f"${_format_number(metric.value, 0)} NPV"
-    return f"{value} {metric.unit}".strip()
+        text = f"${_format_number(metric.value, 0)} NPV"
+        low_high = (
+            f"${_format_number(metric.interval_low, 0)} to "
+            f"${_format_number(metric.interval_high, 0)}"
+        )
+    else:
+        text = f"{_format_number(metric.value)} {metric.unit}".strip()
+        low_high = (
+            f"{_format_number(metric.interval_low)} to "
+            f"{_format_number(metric.interval_high)}"
+        )
+    if (
+        with_interval
+        and metric.interval_low is not None
+        and metric.interval_high is not None
+    ):
+        return f"{text}<br/>95% CI {low_high}"
+    return text
 
 
 def _humanize(value: object) -> str:
@@ -301,18 +322,23 @@ def _metric_table(
     selected = [metric for metric_id in metric_ids if (metric := _metric(run, metric_id))]
     header = [
         Paragraph("Metric", styles["table_header"]),
-        Paragraph("Result", styles["table_header"]),
-        Paragraph("Confidence", styles["table_header"]),
+        # The result column now carries the interval, because a point estimate
+        # printed alone in an investment memorandum reads as a measurement.
+        Paragraph("Result (95% CI)", styles["table_header"]),
+        # Previously "Confidence", filled with a hand-set constant rendered as a
+        # percentage. An investment committee reads 56% as a probability.
+        Paragraph("Evidence grade", styles["table_header"]),
         Paragraph("Evidence", styles["table_header"]),
     ]
     rows = [header]
     for metric in selected:
-        confidence = f"{metric.confidence * 100:.0f}%<br/>{_safe(metric.data_class.value)}"
+        grade = metric.evidence_grade.value if metric.evidence_grade else "n/a"
+        provenance = f"{_safe(grade)}<br/>{_safe(metric.data_class.value)}"
         rows.append(
             [
                 Paragraph(_safe(metric.label), styles["table"]),
                 Paragraph(_safe(_metric_value(metric)), styles["table"]),
-                Paragraph(confidence, styles["table"]),
+                Paragraph(provenance, styles["table"]),
                 _evidence_links(
                     metric.evidence_ids,
                     run_id=run.run_id,
@@ -506,11 +532,30 @@ def build_investment_memo(run: AnalysisResponse, *, base_url: str) -> bytes:
         Spacer(1, 12),
     ]
 
+    # The headline tiles stay as point values; the interval is one line below in
+    # the metric table, where there is room to read it.
     kpis = [
-        ("Local thermal drift", _metric_value(_metric(run, "local_thermal_drift_c"))),
-        ("Eligible hours lost", _metric_value(_metric(run, "temperature_eligible_hours_lost"))),
-        ("Local excess buildout", _metric_value(_metric(run, "local_excess_built_surface_change_percentage_points"))),
-        ("Lease-life exposure", _metric_value(_metric(run, "thermal_drift_npv"))),
+        (
+            "Local thermal drift",
+            _metric_value(_metric(run, "local_thermal_drift_c"), with_interval=False),
+        ),
+        (
+            "Eligible hours lost",
+            _metric_value(
+                _metric(run, "temperature_eligible_hours_lost"), with_interval=False
+            ),
+        ),
+        (
+            "Local excess buildout",
+            _metric_value(
+                _metric(run, "local_excess_built_surface_change_percentage_points"),
+                with_interval=False,
+            ),
+        ),
+        (
+            "Lease-life exposure",
+            _metric_value(_metric(run, "thermal_drift_npv"), with_interval=False),
+        ),
     ]
     kpi_table = Table(
         [
