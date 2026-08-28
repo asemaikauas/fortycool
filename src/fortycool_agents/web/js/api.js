@@ -76,6 +76,10 @@ const FortyCoolAPI = (() => {
   const streamRunJob = (runId) => new EventSource(`${BASE_URL}/run-jobs/${encodeURIComponent(runId)}/stream`);
   const getRun = async (runId) => normalizeRun(await request(`/runs/${encodeURIComponent(runId)}`));
   const getRunEvents = (runId) => request(`/runs/${encodeURIComponent(runId)}/events`);
+  // Ask the server whether this run passed the evidence gates. The dashboard
+  // must never assert that from a query parameter it supplied itself.
+  const getRunVerification = (runId) =>
+    request(`/runs/${encodeURIComponent(runId)}/verification`);
   const getEvidence = (runId, evidenceId) =>
     request(`/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(evidenceId)}`);
   const memoUrl = (runId) => `${BASE_URL}/runs/${encodeURIComponent(runId)}/memo.pdf`;
@@ -130,6 +134,7 @@ const FortyCoolAPI = (() => {
     streamRunJob,
     getRun,
     getRunEvents,
+    getRunVerification,
     getEvidence,
     memoUrl,
     askCopilot,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fortycool_agents.models import AnalysisRequest, DataClass, SiteInput
+from fortycool_agents.models import AnalysisRequest, DataClass, SiteInput, WarningCode
 from fortycool_agents.orchestrator import FortyCoolOrchestrator
 from fortycool_agents.providers.dynamic_world import (
     DYNAMIC_WORLD_DATASET,
@@ -141,7 +141,7 @@ def test_orchestrator_links_dynamic_world_history_to_thermal_attribution() -> No
     request = AnalysisRequest(
         site=site(),
         analysis_modes=["thermal_drift"],
-        baseline_year=2022,
+        baseline_year=2019,
     )
 
     response = asyncio.run(orchestrator.run(request))
@@ -168,3 +168,39 @@ def test_orchestrator_links_dynamic_world_history_to_thermal_attribution() -> No
     )
     evidence_ids = {item.id for item in response.evidence}
     assert set(attribution.evidence_ids) <= evidence_ids
+    # Every correlation now ships with its sample size and interval; a bare r
+    # over a handful of years reads as far more certain than it is.
+    assert attribution.interval_low is not None
+    assert attribution.interval_high is not None
+    assert attribution.interval_low < attribution.value < attribution.interval_high
+
+
+def test_attribution_is_withheld_when_too_few_paired_years_exist() -> None:
+    """Below the minimum sample the correlation is refused, not published.
+
+    At n=3 the 5% critical value for |r| is 0.997 and two unrelated series clear
+    0.8 four times in ten, so a short-series correlation is not evidence of
+    anything and must not reach a dashboard as a number.
+    """
+
+    urban = DynamicWorldUrbanProvider(FakeDynamicWorldGateway())
+    orchestrator = FortyCoolOrchestrator(
+        provider=FixtureThermalProvider(), urban_provider=urban
+    )
+    request = AnalysisRequest(
+        site=site(),
+        analysis_modes=["thermal_drift"],
+        baseline_year=2022,
+    )
+
+    response = asyncio.run(orchestrator.run(request))
+
+    metric_ids = {metric.id for metric in response.metrics}
+    assert "thermal_land_cover_association_correlation" not in metric_ids
+    status = next(
+        metric
+        for metric in response.metrics
+        if metric.id == "thermal_land_cover_association_status"
+    )
+    assert status.value == "withheld"
+    assert WarningCode.ATTRIBUTION_WITHHELD.value in response.warning_codes

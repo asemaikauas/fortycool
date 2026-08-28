@@ -96,18 +96,47 @@
       const thermalChart = run.chartsById.thermal_drift_timeseries;
       const landCoverChart = run.chartsById.historical_land_cover_timeseries;
 
+      // The comparison is named from the run, not hardcoded. This line asserted
+      // "matched regional controls" even on runs where the candidates were
+      // rejected and the disclosed local outer ring was used instead, while the
+      // very next line printed that rejection.
+      const controlMethod = String(controlStatus?.value || "").toLowerCase();
+      const controlName =
+        controlMethod === "accepted"
+          ? "matched regional controls"
+          : "the disclosed local outer ring";
+      const interval =
+        drift && drift.interval_low !== null && drift.interval_low !== undefined
+          ? ` (95% CI ${FortyCoolAPI.formatNumber(drift.interval_low, 3)} to ${FortyCoolAPI.formatNumber(drift.interval_high, 3)})`
+          : "";
       el("driftSubtitle").textContent = drift
-        ? `Site vs matched regional controls · ${metricText(drift, 3, true)}°C local drift · ${humanize(run.confidence_tier)} confidence tier`
-        : "Site vs regional control — drift was not computed";
+        ? `Site vs ${controlName} · ${metricText(drift, 3, true)}°C local drift${interval} · ${humanize(run.confidence_tier)} confidence tier`
+        : (metrics.thermal_drift_status
+            ? `Drift withheld: ${metrics.thermal_drift_status.caveats?.[0] || "not identified from observed data"}`
+            : "Site vs control, drift was not computed");
       el("thermalDataClass").textContent = thermalChart ? `${humanize(thermalChart.data_class)} · ${thermalChart.data.length} YEARS` : "NO THERMAL SERIES";
       el("driftValue").textContent = metricText(driftRate, 3, true);
       el("eligibleHours").textContent = metricText(hours, 0);
       el("financialExposure").textContent = npv ? `$${FortyCoolAPI.formatNumber(npv.value, 0)}` : "—";
-      el("financialClass").textContent = npv ? `${humanize(npv.data_class)} · ${Math.round(npv.confidence * 100)}% confidence` : "Not calculated";
+      el("financialClass").textContent = npv
+        ? [
+            humanize(npv.data_class),
+            npv.evidence_grade ? `evidence ${npv.evidence_grade}` : null,
+            npv.interval_low !== null && npv.interval_low !== undefined
+              ? `95% CI $${FortyCoolAPI.formatNumber(npv.interval_low, 0)} to $${FortyCoolAPI.formatNumber(npv.interval_high, 0)}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : "Not calculated";
       el("controlScore").textContent = metricText(controlScore, 3);
       el("controlStatus").textContent = controlStatus ? `${humanize(controlStatus.value)} quality gate` : "Local outer ring used";
       el("builtChange").textContent = builtChange ? `${metricText(builtChange, 3, true)} pp` : "—";
-      el("association").textContent = association ? metricText(association, 3, true) : "Not enough paired years";
+      el("association").textContent = association
+        ? `${metricText(association, 3, true)} (95% CI ${FortyCoolAPI.formatNumber(association.interval_low, 3)} to ${FortyCoolAPI.formatNumber(association.interval_high, 3)})`
+        : (metrics.thermal_land_cover_association_status
+            ? "Withheld: too few observed years, or an interpolated series"
+            : "Not enough paired years");
 
       renderTemperatureChart(thermalChart);
       renderLandCoverChart(landCoverChart);

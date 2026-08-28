@@ -5,9 +5,9 @@
 <script>(function(){try{var t=localStorage.getItem('fortycool-theme')||'dark';document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();</script>
 <link href="../css/theme-vars.css" rel="stylesheet"/>
 <title>FortyCool - Site Setup</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="../vendor/tailwind/tailwind.js"></script>
+<link href="../vendor/fonts/symbols.css" rel="stylesheet"/>
+<link href="../vendor/fonts/geist.css" rel="stylesheet"/>
 <script id="tailwind-config">
         tailwind.config = {
           darkMode: "class",
@@ -221,6 +221,16 @@ ThermalDrift + 12-hour operations + investment analysis
 <button class="flex-1 bg-primary text-on-primary py-2 rounded text-label-md font-label-md hover:bg-primary-fixed transition-colors" id="analyzeBtn">ANALYZE SITE</button>
 <button class="px-4 bg-transparent border border-outline-variant text-primary py-2 rounded text-label-md font-label-md hover:border-primary transition-colors" id="revertBtn">REVERT</button>
 </div>
+</div>
+<!--
+  Shown whenever the thermal provider is the fixture. The fixture's annual
+  series never reads the site coordinates, so the drift, the hours, and the NPV
+  are identical for every location on earth. Anyone typing their own site into
+  this form has to be told that before they read the result.
+-->
+<div class="hidden px-3 py-2 border-t border-status-simulated bg-status-simulated/10 shrink-0" id="fixtureModeBanner">
+<span class="text-label-sm font-label-sm text-status-simulated uppercase tracking-widest">Fixture mode</span>
+<span class="text-label-md font-label-md text-on-surface-variant ml-2">Thermal history is a fixed demo series. The drift, eligible hours, and exposure figures below are identical for any coordinates you enter and are not an analysis of this location.</span>
 </div>
 <div class="h-48 border-t border-outline-variant bg-[#0a0a0a] flex flex-col shrink-0 relative overflow-hidden">
 <div class="px-3 py-1 border-b border-outline-variant/30 flex justify-between items-center bg-[#0a0a0a]">

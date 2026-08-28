@@ -27,6 +27,11 @@ class SpatialAggregate:
     control_tile_count: int
     control_zone_count: int = 1
     control_tile_counts: tuple[int, ...] = ()
+    # True when no tile fell inside the site radius or outside the control
+    # radius and the nearest/farthest quartiles were substituted. The result is
+    # then a gradient across one small patch rather than a site-versus-control
+    # comparison, and every surface that shows it must say so.
+    used_distance_fallback: bool = False
 
 
 class FortyGuardThermalProvider:
@@ -64,6 +69,11 @@ class FortyGuardThermalProvider:
         self.max_concurrency = max_concurrency
         self.annual_reference_month = annual_reference_month
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+
+    def reference_time(self) -> datetime:
+        """This provider's "now", shared by the training and forecast windows."""
+
+        return self.clock().astimezone(timezone.utc)
 
     @staticmethod
     def _generated_aoi(site: SiteInput) -> dict[str, Any]:
@@ -126,27 +136,53 @@ class FortyGuardThermalProvider:
     def _result(
         response: dict[str, Any],
     ) -> tuple[str | None, dict[str, Any], list[dict[str, Any]]]:
-        data = response.get("data", {})
-        result = data.get("result", {})
-        map_data = result.get("map_data", {})
-        features = map_data.get("features", [])
+        """Normalise an upstream body without assuming any key is a dict.
+
+        `response.get("data", {})` returns None when the key is present but
+        null, and the same held for `result` and `map_data`, so five plausible
+        upstream shapes raised AttributeError, TypeError, or ValueError from
+        outside the provider's own error handling and reached clients as a 500.
+        Every failure here is a FortyGuardError, which callers already degrade
+        on.
+        """
+
+        if not isinstance(response, dict):
+            raise FortyGuardError("FortyGuard returned a non-object response")
+        data = response.get("data") or {}
+        if not isinstance(data, dict):
+            raise FortyGuardError("FortyGuard data was not an object")
+        result = data.get("result") or {}
+        if not isinstance(result, dict):
+            raise FortyGuardError("FortyGuard result was not an object")
+        map_data = result.get("map_data") or {}
+        if not isinstance(map_data, dict):
+            raise FortyGuardError("FortyGuard map_data was not an object")
+        features = map_data.get("features") or []
         if not isinstance(features, list):
             raise FortyGuardError("FortyGuard map_data.features was not a list")
+        features = [feature for feature in features if isinstance(feature, dict)]
         activity_id = data.get("activity_id")
         return str(activity_id) if activity_id else None, map_data, features
 
     @staticmethod
     def _centroid(feature: dict[str, Any]) -> tuple[float, float]:
-        geometry = feature.get("geometry", {})
-        if geometry.get("type") != "Polygon":
+        geometry = feature.get("geometry") or {}
+        if not isinstance(geometry, dict) or geometry.get("type") != "Polygon":
             raise FortyGuardError("FortyGuard heatmap feature was not a Polygon")
-        coordinates = geometry.get("coordinates", [])
-        if not coordinates or not coordinates[0]:
+        coordinates = geometry.get("coordinates") or []
+        if not isinstance(coordinates, list) or not coordinates or not coordinates[0]:
             raise FortyGuardError("FortyGuard heatmap polygon had no coordinates")
         ring = coordinates[0]
         points = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring
-        longitude = fmean(float(point[0]) for point in points)
-        latitude = fmean(float(point[1]) for point in points)
+        try:
+            longitude = fmean(float(point[0]) for point in points)
+            latitude = fmean(float(point[1]) for point in points)
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            # A null or non-numeric coordinate is malformed upstream data, not a
+            # programming error, so it degrades like every other bad response.
+            raise FortyGuardError(
+                "FortyGuard heatmap polygon contained an unusable coordinate"
+            ) from exc
         return latitude, longitude
 
     @staticmethod
@@ -171,14 +207,27 @@ class FortyGuardThermalProvider:
     ) -> SpatialAggregate:
         values: list[tuple[float, float]] = []
         for feature in features:
-            raw_value = feature.get("properties", {}).get(value_key)
+            properties = feature.get("properties") or {}
+            if not isinstance(properties, dict):
+                continue
+            raw_value = properties.get(value_key)
             if raw_value is None:
                 continue
             latitude, longitude = self._centroid(feature)
             distance = self._distance_m(
                 site.latitude, site.longitude, latitude, longitude
             )
-            values.append((distance, float(raw_value)))
+            try:
+                numeric_value = float(raw_value)
+            except (TypeError, ValueError) as exc:
+                raise FortyGuardError(
+                    f"FortyGuard tile property {value_key} was not numeric"
+                ) from exc
+            if not math.isfinite(numeric_value):
+                raise FortyGuardError(
+                    f"FortyGuard tile property {value_key} was not finite"
+                )
+            values.append((distance, numeric_value))
         if len(values) < 2:
             raise FortyGuardError(
                 f"FortyGuard heatmap did not contain enough {value_key} tiles"
@@ -192,16 +241,24 @@ class FortyGuardThermalProvider:
         ]
         ordered = sorted(values)
         fallback_count = max(1, len(ordered) // 4)
+        # The substitution below keeps a run alive when the tile grid does not
+        # resolve into a site core and a control ring, but the result is a
+        # gradient across one patch, not a site-versus-control comparison. It is
+        # flagged so nothing downstream treats it as the latter.
+        used_fallback = False
         if not site_values:
             site_values = [value for _, value in ordered[:fallback_count]]
+            used_fallback = True
         if not control_values:
             control_values = [value for _, value in ordered[-fallback_count:]]
+            used_fallback = True
         return SpatialAggregate(
             site_value=fmean(site_values),
             control_value=fmean(control_values),
             site_tile_count=len(site_values),
             control_tile_count=len(control_values),
             control_tile_counts=(len(control_values),),
+            used_distance_fallback=used_fallback,
         )
 
     def _matched_spatial_aggregate(
@@ -345,11 +402,7 @@ class FortyGuardThermalProvider:
     async def forecast(
         self, site: SiteInput, hours: int, *, seed: int
     ) -> ThermalDataset:
-        start = (
-            self.clock()
-            .astimezone(timezone.utc)
-            .replace(minute=0, second=0, microsecond=0)
-        )
+        start = self.reference_time().replace(minute=0, second=0, microsecond=0)
         start += timedelta(hours=1)
         timestamps = [start + timedelta(hours=index) for index in range(hours)]
         fallback = await self.fallback.history(
@@ -513,13 +566,27 @@ class FortyGuardThermalProvider:
             )
             return year, temperature, eligibility, days
 
-        results = await asyncio.gather(*(retrieve_year(year) for year in years))
+        # `return_exceptions` matters here: the inner per-year gather already
+        # has it, and without it on the outer gather any failure raised out of
+        # the provider instead of degrading that one year, which turned a
+        # caller-supplied AOI into a 500 for the whole request.
+        gathered = await asyncio.gather(
+            *(retrieve_year(year) for year in years), return_exceptions=True
+        )
         observed: dict[int, AnnualThermalSummary] = {}
         activity_ids: list[str] = []
         attempted_activity_ids: list[str] = []
         missing_years: list[int] = []
         failure_types: set[str] = set()
+        spatial_fallback_years: list[int] = []
         tile_counts: dict[str, dict[str, Any]] = {}
+        results: list[tuple[int, Any, Any, int]] = []
+        for year, outcome in zip(years, gathered):
+            if isinstance(outcome, BaseException):
+                missing_years.append(year)
+                failure_types.add(type(outcome).__name__)
+                continue
+            results.append(outcome)
         for year, temperature_response, eligibility_response, days in results:
             if isinstance(temperature_response, Exception) or isinstance(
                 eligibility_response, Exception
@@ -556,6 +623,8 @@ class FortyGuardThermalProvider:
             except FortyGuardError:
                 missing_years.append(year)
                 continue
+            if temperatures.used_distance_fallback or eligible.used_distance_fallback:
+                spatial_fallback_years.append(year)
             activity_ids.extend(response_activity_ids)
             window_hours = days * 24
             annualization = 8760 / window_hours
@@ -575,6 +644,7 @@ class FortyGuardThermalProvider:
                 "control_tiles": temperatures.control_tile_count,
                 "control_zones": temperatures.control_zone_count,
                 "control_tiles_by_zone": list(temperatures.control_tile_counts),
+                "used_distance_fallback": temperatures.used_distance_fallback,
             }
 
         if not observed:
@@ -668,6 +738,14 @@ class FortyGuardThermalProvider:
                 + ", ".join(str(year) for year in missing_years)
                 + "; those years are calibrated simulated backcasts."
             )
+        if spatial_fallback_years:
+            warnings.append(
+                "No tiles fell inside the site radius or beyond the control radius for "
+                + ", ".join(str(year) for year in sorted(spatial_fallback_years))
+                + "; the nearest and farthest tile quartiles were substituted, so those "
+                "years compare a gradient across one patch rather than a site against a "
+                "separated control."
+            )
         if failure_types:
             warnings.append(
                 "Historical request failures: " + ", ".join(sorted(failure_types))
@@ -687,6 +765,7 @@ class FortyGuardThermalProvider:
                 "attempted_activity_ids": attempted_activity_ids,
                 "eligibility_annualized": True,
                 "tile_counts": tile_counts,
+                "spatial_fallback_years": sorted(spatial_fallback_years),
                 "control_method": (
                     "satellite_land_cover_matched_regional"
                     if controls

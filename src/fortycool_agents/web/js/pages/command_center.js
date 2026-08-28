@@ -27,6 +27,21 @@
     return `${sign}${FortyCoolAPI.formatNumber(metric.value, 3)}${suffix || ` ${metric.unit}`}`;
   }
 
+  // Grade plus interval, never a hand-set score rendered as a percentage. The
+  // confidence field is a literal chosen in code; printing it as "56%" beside a
+  // dollar figure reads to an investment committee as a probability.
+  function provenanceLine(metric, fallback) {
+    if (!metric) return fallback;
+    const parts = [humanize(metric.data_class)];
+    if (metric.evidence_grade) parts.push(`evidence ${metric.evidence_grade}`);
+    if (metric.interval_low !== null && metric.interval_low !== undefined) {
+      parts.push(
+        `95% CI ${FortyCoolAPI.formatNumber(metric.interval_low, 3)} to ${FortyCoolAPI.formatNumber(metric.interval_high, 3)}`
+      );
+    }
+    return parts.join(" · ");
+  }
+
   function appendTraceStep(step) {
     const key = `${step.timestamp || ""}|${step.agent || ""}|${step.action || ""}`;
     if (seenTrace.has(key)) return;
@@ -190,17 +205,73 @@
 
   function renderKpis(run) {
     const drift = run.metricsById.local_thermal_drift_c;
+    const driftStatus = run.metricsById.thermal_drift_status;
     const hours = run.metricsById.temperature_eligible_hours_lost;
     const built = run.metricsById.local_excess_built_surface_change_percentage_points
       || run.metricsById.built_surface_change_percentage_points;
     const npv = run.metricsById.thermal_drift_npv;
-    el("kpiDrift").textContent = signedMetric(drift);
-    el("kpiDriftClass").textContent = drift ? `${humanize(drift.data_class)} · ${Math.round(drift.confidence * 100)}% confidence` : "Awaiting analysis";
+    // A withheld drift is a result, not a blank. Showing an em dash where the
+    // gate refused to publish a number reads as "still loading".
+    el("kpiDrift").textContent = drift ? signedMetric(drift) : (driftStatus ? "Withheld" : "—");
+    el("kpiDriftClass").textContent = drift
+      ? provenanceLine(drift, "Awaiting analysis")
+      : (driftStatus ? "Not identified from observed data" : "Awaiting analysis");
     el("kpiDriftClass").className = `text-label-sm font-label-sm ${dataClassStyles[drift?.data_class] || "text-on-surface-variant"}`;
     el("kpiHours").textContent = hours ? FortyCoolAPI.formatNumber(hours.value, 0) : "—";
+    el("kpiHoursClass").textContent = provenanceLine(hours, "hours / year");
     el("kpiBuilt").textContent = built ? signedMetric(built, " pp") : "—";
     el("kpiNpv").textContent = npv ? `$${FortyCoolAPI.formatNumber(npv.value, 0)}` : "—";
-    el("kpiNpvClass").textContent = npv ? `${humanize(npv.data_class)} · ${Math.round(npv.confidence * 100)}% confidence` : "Indicative NPV";
+    el("kpiNpvClass").textContent = provenanceLine(npv, "Indicative NPV");
+  }
+
+  // Warnings and assumptions used to appear on this screen only as counts.
+  function renderCaveats(run) {
+    const panel = el("caveatPanel");
+    const list = el("caveatList");
+    const warnings = run.warnings || [];
+    const assumptions = run.assumptions || [];
+    if (!warnings.length && !assumptions.length) {
+      panel.classList.add("hidden");
+      return;
+    }
+    panel.classList.remove("hidden");
+    el("caveatHeading").textContent =
+      `What this run does not establish (${warnings.length} ${warnings.length === 1 ? "warning" : "warnings"})`;
+    const COLLAPSED = 3;
+    let expanded = false;
+    const paint = () => {
+      const shown = expanded ? warnings : warnings.slice(0, COLLAPSED);
+      list.innerHTML = shown
+        .map((item) => `<li>${FortyCoolAPI.escapeHTML(item)}</li>`)
+        .join("");
+      const assumptionBlock = el("assumptionBlock");
+      if (expanded && assumptions.length) {
+        assumptionBlock.classList.remove("hidden");
+        el("assumptionHeading").textContent =
+          `Unconfirmed assumptions (${assumptions.length})`;
+        el("assumptionList").innerHTML = assumptions
+          .map(
+            (item) =>
+              `<li>${FortyCoolAPI.escapeHTML(item.field)} = ${FortyCoolAPI.escapeHTML(item.value)} — ${FortyCoolAPI.escapeHTML(item.reason)}</li>`
+          )
+          .join("");
+      } else {
+        assumptionBlock.classList.add("hidden");
+      }
+      const hidden = warnings.length - shown.length;
+      el("caveatToggle").textContent = expanded
+        ? "Show less"
+        : `Show all (${hidden} more, ${assumptions.length} assumptions)`;
+      el("caveatToggle").classList.toggle(
+        "hidden",
+        warnings.length <= COLLAPSED && !assumptions.length
+      );
+    };
+    el("caveatToggle").onclick = () => {
+      expanded = !expanded;
+      paint();
+    };
+    paint();
   }
 
   function renderRecommendation(run) {
@@ -284,44 +355,47 @@
     });
   }
 
-  function renderRunActions(run, historyRecord) {
+  // The badge is a claim about evidence, so only the server may make it. It
+  // used to be driven by `?verified=1` in the address bar plus a localStorage
+  // entry, which meant any run, including a wholly fixture one, could be shown
+  // as verified by editing the URL.
+  async function renderRunActions(run) {
     const memoButton = el("downloadMemoBtn");
     memoButton.href = FortyCoolAPI.memoUrl(run.run_id);
     memoButton.download = `fortycool-thermaldrift-${run.run_id.slice(0, 8)}.pdf`;
     memoButton.classList.remove("hidden");
     memoButton.classList.add("inline-flex");
 
-    const manifestKey = `fortycool_verified_demo_${run.run_id}`;
-    let manifest = null;
-    try {
-      manifest = JSON.parse(localStorage.getItem(manifestKey) || "null");
-    } catch (_) {
-      // A malformed local marker must not prevent a saved run from loading.
-    }
-    const isVerifiedDemo = params.get("verified") === "1" || historyRecord?.verified_demo === true;
-    if (!isVerifiedDemo) return;
     const badge = el("verifiedDemoBadge");
+    badge.classList.add("hidden");
+    let verification = null;
+    try {
+      verification = await FortyCoolAPI.getRunVerification(run.run_id);
+    } catch (_) {
+      return; // No verification available: show no claim at all.
+    }
+    if (!verification?.verified) return;
     badge.classList.remove("hidden");
-    const years = manifest?.thermal_years;
+    const years = verification.thermal_years;
     badge.textContent = years?.length
       ? `VERIFIED FORTYGUARD ${years[0]}-${years[years.length - 1]}`
       : "VERIFIED SAVED RUN";
-    badge.title = (manifest?.verification_notes || [
-      "This badge identifies a previously completed run that passed the backend evidence gates.",
-    ]).join(" ");
+    badge.title = (verification.verification_notes || []).join(" ");
   }
 
   async function loadFinalRun() {
     const run = await FortyCoolAPI.getRun(runId);
     runReady = true;
     const historyRecord = FortyCoolAPI.listLocalRuns().find((item) => item.run_id === runId);
-    const savedLabel = params.get("verified") === "1" || historyRecord?.verified_demo
-      ? "Saved verified demo · "
+    const degraded = (run.degraded_stages || []).length
+      ? ` · ${run.degraded_stages.length} degraded stage(s)`
       : "";
-    el("runStatusBadge").textContent = `${savedLabel}${humanize(run.status)} · ${humanize(run.confidence_tier)} · ${run.warnings.length} warnings`;
+    el("runStatusBadge").textContent =
+      `${humanize(run.status)} · ${humanize(run.confidence_tier)} · ${run.warnings.length} warnings${degraded}`;
     el("siteName").textContent = historyRecord?.site_name || "FortyCool Site Analysis";
-    renderRunActions(run, historyRecord);
+    renderRunActions(run);
     run.trace.forEach(appendTraceStep);
+    renderCaveats(run);
     renderKpis(run);
     renderMap(run);
     renderTemperatureTimeline(run);

@@ -50,6 +50,16 @@ class AnnualThermalDataset:
 
 
 class ThermalDataProvider(Protocol):
+    def reference_time(self) -> datetime:
+        """The instant this provider treats as "now".
+
+        Training windows and forecast windows must be anchored to the same
+        clock. The agents used to hardcode one instant for training while the
+        live provider forecast from the real wall clock, so the two windows
+        drifted apart by a day for every day the service stayed deployed.
+        """
+        ...
+
     async def history(
         self, site: SiteInput, start: datetime, end: datetime, *, seed: int
     ) -> ThermalDataset: ...
@@ -78,6 +88,14 @@ class FixtureThermalProvider:
     """
 
     source = "fixture://fortyguard-shaped-thermal-series/v1"
+
+    # A fixed reference instant keeps fixture-mode snapshots byte-reproducible,
+    # which is the point of the fixture provider. It is exposed rather than
+    # hardcoded at the call site so training and forecast share one clock.
+    REFERENCE_INSTANT = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
+
+    def reference_time(self) -> datetime:
+        return self.REFERENCE_INSTANT
 
     @staticmethod
     def _temperature(
@@ -134,8 +152,7 @@ class FixtureThermalProvider:
     async def forecast(
         self, site: SiteInput, hours: int, *, seed: int
     ) -> ThermalDataset:
-        # A fixed reference instant keeps fixture-mode snapshots reproducible.
-        start = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
+        start = self.reference_time()
         dataset = await self.history(
             site, start, start + timedelta(hours=hours), seed=seed + 1000
         )
@@ -195,5 +212,11 @@ class FixtureThermalProvider:
                     else "fixture_regional_control"
                 ),
                 "control_sites": [control.model_dump() for control in controls],
+                # The annual series is a fixed synthetic trend. It does not read
+                # `site`, so every location produces identical figures, and any
+                # surface showing them must say so rather than implying the
+                # entered coordinates were analysed.
+                "location_dependent": False,
+                "fixture_local_excess_per_year_c": 0.105,
             },
         )

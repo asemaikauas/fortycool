@@ -103,9 +103,26 @@ def _verified_manifest(
     )
 
 
+def verified_manifest_for(run: AnalysisResponse) -> VerifiedDemoResponse | None:
+    """Run the verification gates against one specific run.
+
+    Exposed so a client can ask "is THIS run verified" instead of asserting it
+    from a query parameter it supplied itself.
+    """
+
+    return _verified_manifest(run, saved_at=datetime.now(timezone.utc))
+
+
+# Every candidate row is parsed into a full response object, charts and GeoJSON
+# included, on each call to a public endpoint. Five hundred of those per request
+# was a self-inflicted load; the newest hundred is more than enough to find the
+# most recent verified run.
+VERIFIED_DEMO_SCAN_LIMIT = 100
+
+
 def latest_verified_demo(repository: RunRepository) -> VerifiedDemoResponse | None:
     candidates: list[VerifiedDemoResponse] = []
-    for saved_at, run in repository.list_recent(limit=500):
+    for saved_at, run in repository.list_recent(limit=VERIFIED_DEMO_SCAN_LIMIT):
         manifest = _verified_manifest(run, saved_at=_saved_at(saved_at))
         if manifest is not None:
             candidates.append(manifest)

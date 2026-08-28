@@ -148,27 +148,73 @@ def make_forecast_operating_frame(
     return simulated
 
 
+# Columns that represent a discrete state rather than a quantity. Averaging a
+# binary flag across a resample window produces values the model never saw in
+# training: a column toggling each 15-minute sample became a constant 0.5.
+STATE_COLUMNS = ("economizer_state",)
+
+MODEL_TARGET_COLUMNS = (
+    "it_load_kw",
+    "cooling_power_kw",
+    "server_inlet_temperature_c",
+)
+
+
+@dataclass(frozen=True)
+class EnrichmentResult:
+    """The aligned frame plus an honest account of what was filled in."""
+
+    frame: pd.DataFrame
+    warnings: list[str]
+    interpolated_rows: int
+    dropped_rows: int
+
+    @property
+    def values_were_invented(self) -> bool:
+        return self.interpolated_rows > 0
+
+
 def enrich_uploaded_bms(
     uploaded: pd.DataFrame,
     thermal: ThermalDataset,
     facility: FacilityProfile,
-) -> tuple[pd.DataFrame, list[str]]:
+) -> EnrichmentResult:
     """Align uploaded BMS telemetry with thermal data and fill optional controls.
 
     Uploaded series are normalized to hourly cadence so model validation and the
-    forecast horizon retain consistent semantics.
+    forecast horizon retain consistent semantics. Any value this function
+    invents to close a gap is counted and reported: the interpolation fills the
+    two model targets, so an unreported fill is the service manufacturing a
+    customer measurement and then labelling it as measured.
     """
     warnings: list[str] = []
     frame = uploaded.copy(deep=True)
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
-    frame = (
-        frame.set_index("timestamp")
-        .resample("1h")
-        .mean(numeric_only=True)
-        .interpolate(limit=2)
-        .dropna(subset=["it_load_kw", "cooling_power_kw", "server_inlet_temperature_c"])
-        .reset_index()
-    )
+    resampled = frame.set_index("timestamp").resample("1h")
+    hourly = resampled.mean(numeric_only=True)
+    for column in STATE_COLUMNS:
+        if column in hourly.columns:
+            # A state is on for the hour if it was on for any sample in it.
+            hourly[column] = resampled[column].max()
+    present_targets = [
+        column for column in MODEL_TARGET_COLUMNS if column in hourly.columns
+    ]
+    missing_before = int(hourly[present_targets].isna().any(axis=1).sum())
+    interpolated = hourly.interpolate(limit=2)
+    missing_after = int(interpolated[present_targets].isna().any(axis=1).sum())
+    interpolated_rows = missing_before - missing_after
+    frame = interpolated.dropna(subset=present_targets).reset_index()
+    dropped_rows = missing_after
+    if interpolated_rows > 0:
+        warnings.append(
+            f"{interpolated_rows} hourly rows had missing model inputs and were filled "
+            "by interpolation; those values are inferred, not measured."
+        )
+    if dropped_rows > 0:
+        warnings.append(
+            f"{dropped_rows} hourly rows had gaps longer than the interpolation limit "
+            "and were dropped from the training history."
+        )
 
     weather = pd.DataFrame(
         [
@@ -193,7 +239,10 @@ def enrich_uploaded_bms(
         "solar_irradiance_w_m2",
     ]
     if frame[weather_columns].isna().any().any():
-        raise ValueError("thermal provider did not cover the uploaded telemetry interval")
+        raise ValueError(
+            "the thermal provider did not cover the uploaded telemetry interval; "
+            "upload a period the weather source can supply"
+        )
 
     params = resolve_facility_parameters(facility)
     defaults: dict[str, float] = {
@@ -216,4 +265,9 @@ def enrich_uploaded_bms(
         frame["total_facility_power_kw"] = (
             frame["it_load_kw"] + frame["cooling_power_kw"] + auxiliary
         )
-    return frame, warnings
+    return EnrichmentResult(
+        frame=frame,
+        warnings=warnings,
+        interpolated_rows=interpolated_rows,
+        dropped_rows=dropped_rows,
+    )

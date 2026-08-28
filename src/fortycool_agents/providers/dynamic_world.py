@@ -481,6 +481,8 @@ class DynamicWorldUrbanProvider:
                 "latest_image_year": latest_year,
                 "complete_history_years": complete_site_years,
                 "annual_land_cover_series": annual_series,
+                # One Dynamic World composite per year, not a straight-line fill.
+                "annual_land_cover_series_basis": "observed_per_year",
                 "missing_records": sorted(set(missing_records)),
                 "minimum_scene_count": self.minimum_scene_count,
                 "minimum_valid_pixels": self.minimum_valid_pixels,

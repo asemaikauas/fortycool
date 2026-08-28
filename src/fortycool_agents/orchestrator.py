@@ -17,9 +17,11 @@ from .models import (
     AnalysisRequest,
     AnalysisResponse,
     ConfidenceTier,
+    DataClass,
     RunStatus,
     SafetyVerdict,
     TraceEvent,
+    WarningCode,
 )
 from .providers import build_thermal_provider, build_urban_provider
 from .providers.fixture import ThermalDataProvider
@@ -40,7 +42,7 @@ class FortyCoolOrchestrator:
         )
         self.telemetry_store = telemetry_store or TelemetryStore()
         self.planner = PlanningAgent()
-        self.urban_agent = UrbanChangeAgent(self.urban_provider)
+        self.urban_agent = UrbanChangeAgent(self.urban_provider, self.provider)
         self.temperature_agent = TemperatureIntelligenceAgent(self.provider)
         self.asset_agent = AssetModelingAgent(self.provider, self.telemetry_store)
         self.decision_agent = DecisionAgent()
@@ -68,10 +70,26 @@ class FortyCoolOrchestrator:
         await self.audit_agent.run(context)
         return self._response(context)
 
-    @staticmethod
-    def _response(context: RunContext) -> AnalysisResponse:
-        evidence_failure = any(
-            "Evidence verification failed" in item for item in context.warnings
+    # Lowest to highest. A cap can only ever move a tier down this list.
+    _TIER_ORDER = (
+        ConfidenceTier.SCREENING,
+        ConfidenceTier.INDICATIVE,
+        ConfidenceTier.OPERATIONAL,
+    )
+
+    @classmethod
+    def _cap_tier(
+        cls, tier: ConfidenceTier, ceiling: ConfidenceTier
+    ) -> ConfidenceTier:
+        return min(tier, ceiling, key=cls._TIER_ORDER.index)
+
+    @classmethod
+    def _response(cls, context: RunContext) -> AnalysisResponse:
+        # Run status is decided by a code the producing agent set, never by
+        # searching for a sentence. Rewording a warning used to silently turn a
+        # failed evidence check into a completed run.
+        evidence_failure = (
+            WarningCode.EVIDENCE_VERIFICATION_FAILED.value in context.warning_codes
         )
         incomplete = any(
             recommendation.verdict == SafetyVerdict.INSUFFICIENT_DATA
@@ -87,7 +105,7 @@ class FortyCoolOrchestrator:
             status = RunStatus.COMPLETED
 
         contains_simulated_evidence = any(
-            item.data_class.value == "simulated" for item in context.evidence
+            item.data_class == DataClass.SIMULATED for item in context.evidence
         )
         if contains_simulated_evidence:
             tier = ConfidenceTier.INDICATIVE
@@ -95,6 +113,24 @@ class FortyCoolOrchestrator:
             tier = ConfidenceTier.SCREENING
         else:
             tier = ConfidenceTier.OPERATIONAL
+
+        # The tier must follow coverage, not labels. Partial provider coverage
+        # used to raise the tier while the headline number stayed entirely
+        # fixture-derived, because the check only looked for the literal string
+        # "simulated" on an evidence record.
+        thermal_evidence = next(
+            (item for item in context.evidence if item.id.startswith("thermal-")),
+            None,
+        )
+        if thermal_evidence is not None:
+            backcast_years = thermal_evidence.metadata.get("backcast_years") or []
+            observed_years = thermal_evidence.metadata.get("observed_years")
+            if backcast_years:
+                tier = cls._cap_tier(tier, ConfidenceTier.INDICATIVE)
+            if observed_years is not None and len(observed_years) < 2:
+                tier = cls._cap_tier(tier, ConfidenceTier.SCREENING)
+        if context.degraded_stages:
+            tier = cls._cap_tier(tier, ConfidenceTier.INDICATIVE)
 
         metric_map = {metric.id: metric for metric in context.metrics}
         drift = metric_map.get("local_thermal_drift_c")
@@ -157,4 +193,6 @@ class FortyCoolOrchestrator:
             trace=context.trace,
             assumptions=context.assumptions,
             warnings=context.warnings,
+            warning_codes=context.warning_codes,
+            degraded_stages=context.degraded_stages,
         )

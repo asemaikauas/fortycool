@@ -13,14 +13,15 @@ simulated unless the operator uploads facility telemetry.
 - Typed analysis requests and responses
 - Logical planning, temperature, asset-modeling, decision, investment, and audit agents
 - Reproducible data-center BMS simulation driven by thermal conditions
-- Site-versus-control difference-in-differences and eligibility-hour analysis
+- Site-versus-control difference-in-differences with a 95% confidence interval on every
+  published drift, and signed eligibility-hour analysis
 - Satellite land-cover context and regional-control matching
 - Google Dynamic World annual 10 m land-cover history with complete-coverage gates
 - Two-stage public data-center discovery with an explicit no-winner outcome
-- Cooling-demand and inlet-temperature models with a held-out-day backtest
-- Constrained enumeration of 12-hour operating scenarios
-- Safety vetoes and an explicit `hold_current_settings` path
-- Indicative energy and NPV translation
+- Cooling-demand and inlet-temperature models with blocked rolling-origin cross-validation
+- Evaluation of a declared 12-hour operating envelope against the operator's safety constraints
+- Safety vetoes, a training-envelope rejection, and an explicit `hold_current_settings` path
+- Indicative energy and NPV translation, signed, PUE-scaled, and bounded by the drift interval
 - Evidence lineage and inspectable agent trace
 - FastAPI endpoints and a JSON CLI
 - Validated CSV telemetry uploads with an evidence-based optimization hold
@@ -35,7 +36,10 @@ simulated unless the operator uploads facility telemetry.
 - Historical `tcm` and below-threshold `exceedance` screening with explicit coverage fallbacks
 - GPT-4o copilot answers grounded in completed-run metrics, warnings, and evidence IDs
 - A downloadable, evidence-linked ThermalDrift investment memorandum in PDF format
-- A verified saved-demo selector with strict FortyGuard, Dynamic World, and no-backcast gates
+- A verified saved-demo selector with strict FortyGuard, Dynamic World, and no-backcast gates,
+  asserted by the server rather than by the client
+- API-key authentication, per-caller rate limits, and a request body ceiling
+- A hash-pinned dependency lock and locally vendored dashboard assets
 
 ## Data integrity
 
@@ -49,6 +53,23 @@ The service uses four important labels:
 
 Fixture results must never be presented as live FortyGuard observations. The operating recommendation
 is advisory only and cannot control real equipment.
+
+Alongside `data_class`, every metric carries an ordinal `evidence_grade` (A observed, B derived,
+C simulated or unbounded). The numeric `confidence` field is a hand-set internal score and is no
+longer rendered as a percentage next to a currency figure, because a reader takes "56%" for a
+probability that the number is right.
+
+Two limits are stated rather than implied:
+
+- **In fixture mode the analysis does not depend on the coordinates you enter.** The fixture's
+  annual series is a fixed synthetic trend, so the drift, the eligible hours, and the exposure are
+  identical for every site on earth. The dashboard says so on screen and the response carries the
+  `fixture_series_location_independent` warning code.
+- **A calibrated backcast is not a measurement.** When FortyGuard has no coverage for a year, that
+  year is backfilled from the fixture and offset-calibrated to the first observed year. Those
+  offsets cancel in the difference, so a window ending on a backcast reproduces the fixture's own
+  trend whatever the real data said. Any non-simulated series containing a backcast now withholds
+  `local_thermal_drift_c` and the NPV entirely, on every endpoint, not only on the demo route.
 
 ## Run locally
 
@@ -178,6 +199,62 @@ assumptions, warnings, operational data classes, and an evidence appendix. Metri
 back to the run's immutable evidence endpoints. The report is an advisory screening deliverable, not
 an engineering design or valuation opinion.
 
+## Service limits and authentication
+
+Four endpoints spend money on the account that owns the keys: `POST /runs`, `POST /run-jobs`,
+`POST /agent-tools/*`, and `POST /runs/{id}/copilot`. Rate limits and the body ceiling are always
+on. Authentication is opt-in so a local checkout still runs keyless:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `FORTYCOOL_API_KEY` | unset | When set, every route requires a matching `X-API-Key` header |
+| `FORTYCOOL_RATE_LIMIT_ANALYSIS` | 20 | Analysis requests per window, per caller |
+| `FORTYCOOL_RATE_LIMIT_COPILOT` | 10 | Copilot requests per window, per caller |
+| `FORTYCOOL_RATE_LIMIT_UPLOAD` | 10 | Telemetry writes per window, per caller |
+| `FORTYCOOL_RATE_LIMIT_READ` | 240 | Read requests per window, per caller |
+| `FORTYCOOL_RATE_WINDOW_SECONDS` | 60 | Length of the sliding window |
+| `FORTYCOOL_MAX_REQUEST_BYTES` | 12 MiB | Body ceiling, enforced before buffering |
+| `FORTYCOOL_COPILOT_MAX_CALLS_PER_RUN` | 25 | Model calls allowed against one run id |
+| `FORTYCOOL_MAX_UPLOADS` / `FORTYCOOL_UPLOAD_TTL_SECONDS` | 32 / 3600 | Telemetry retention |
+| `FORTYCOOL_MAX_JOBS` / `FORTYCOOL_JOB_TTL_SECONDS` | 256 / 3600 | Job retention |
+| `FORTYCOOL_MAX_RETAINED_RUNS` | 2000 | Rows kept in the SQLite run store |
+
+Without an API key, `POST /agent-tools/site-discovery` accepts at most four candidates and a
+shortlist of one, because a full request costs roughly ninety paid upstream activities.
+
+**Run a single worker.** `telemetry_store` and `job_manager` are per-process. Under `--workers 2` an
+upload can land on one worker and its run on another, and the analysis then proceeds silently on
+simulated data instead of the customer's telemetry, which is a wrong answer rather than an error.
+
+## Continuous integration
+
+`.github/workflows/tests.yml` runs the suite on every push and pull request across Python 3.11,
+3.12, and 3.13, and checks that the vendored dashboard assets are present and that no page has
+drifted back to loading from a CDN. Before this the tests existed only on a developer's machine, so
+the merge box could say "no conflicts" while nothing had verified anything.
+
+## Reproducible installs
+
+```bash
+pip install --require-hashes -r requirements.lock
+```
+
+The declared dependencies are open ranges, so an unpinned build resolves to whatever is newest on
+PyPI. Regenerate the lock with `scripts/write_lock.py` after changing `pyproject.toml`.
+
+The lock names the interpreter and platform it was resolved for in its header. numpy, pandas, and
+reportlab publish platform-specific wheels, so `--require-hashes` on a different OS, architecture,
+or Python version fails with a hash mismatch. That is the lock doing its job: regenerate it on the
+target platform, or install from `pyproject.toml` there. CI installs from `pyproject.toml` for
+exactly this reason, which also surfaces an upstream release that breaks us.
+
+## Dashboard assets
+
+Tailwind, Leaflet, and the web fonts are vendored under `src/fortycool_agents/web/vendor` and served
+from the same origin. They used to load from three CDNs with no integrity hashes and no fallback, so
+a venue network with a captive portal rendered the dashboard as unstyled HTML. Map *tiles* still come
+from OpenStreetMap and need connectivity; without it the page and the overlays still render.
+
 ## Uploaded telemetry
 
 Send CSV as a raw request body rather than multipart form data:
@@ -206,13 +283,23 @@ fan_speed_percent
 economizer_state
 ```
 
-The validator requires at least 14 days of approximately 15- to 60-minute data, normalizes it to
-hourly cadence, rejects invalid power/temperature values, removes unknown columns, and attaches a
-new upload ID. Uploads are currently stored in memory and expire when the service restarts.
+The validator requires enough data to yield the 336 hourly rows the model consumes, at approximately
+15- to 60-minute cadence, normalizes it to hourly, rejects non-finite and implausible
+power/temperature values, removes unknown columns, and attaches a new upload ID. Uploads are stored
+in memory with an LRU bound and a one-hour expiry, and are lost when the service restarts.
+
+Gaps are interpolated only up to two hours. Any row filled that way is counted, reported in
+`warnings`, and downgrades the BMS evidence from `uploaded` to `inferred`, because a value the
+service invented is not a customer measurement.
 
 If the history does not contain enough variation in setpoints or fan speed, the safety agent returns
 `hold_current_settings`. A forecast model may fit historical demand well without having evidence for
 how a control change would affect the facility; FortyCool treats those as separate questions.
+
+**Known limitation.** The identification check is a variance test, not a test that the variation was
+exogenous. Setpoints in a real BMS move in response to load and weather, and that confounding is
+invisible to a variance floor, so a passing check means "the controls moved", not "their effect is
+identified". The action confidence is still the forecast-fit score; treat it as a fit statistic.
 
 ## Live FortyGuard integration
 
@@ -259,9 +346,14 @@ minimum scene-count and valid-pixel gates, and all selected controls must have c
 The returned evidence includes the `GOOGLE/DYNAMICWORLD/V1` dataset ID, Earth Engine project
 endpoint, workload tag, seasonal window, acquisition bounds, scene counts, valid-pixel counts,
 control coordinates, and annual site-versus-control `built`, vegetation, and bare-ground shares.
-FortyCool calculates local excess built-surface change and, where at least three matched years exist,
-reports the temporal correlation with the site-control thermal gap. The correlation is explicitly an
-attribution hypothesis and never a causal claim.
+FortyCool calculates local excess built-surface change and reports the temporal correlation with the
+site-control thermal gap only where at least eight matched years of genuinely observed annual
+land-cover data exist. Below that the correlation is withheld with a stated reason rather than
+published: at n=3 the 5% critical value for |r| is 0.997, and two unrelated series clear |r| > 0.8
+four times in ten. It is also withheld on any interpolated series, because a straight-line fill
+correlated against a trending thermal series returns 1.0 by construction and measures the
+interpolation. When it is published it carries its sample size and a Fisher 95% interval. The
+correlation is explicitly an attribution hypothesis and never a causal claim.
 
 Earth Engine requires an enabled and registered Google Cloud project plus user or service-account
 credentials. After installing the project dependencies, authenticate and configure the providers:
@@ -282,7 +374,20 @@ four candidate points 3 km north, east, south, and west. Model-specific segment 
 stable land-cover groups. The three candidates with the highest current land-cover similarity must
 all pass a configured quality threshold before they are passed to the historical thermal provider.
 If they fail, FortyCool records the rejected candidates and uses the disclosed local outer ring; it
-does not call weak comparisons "matched controls."
+does not call weak comparisons "matched controls." Every surface, including the dashboard headline,
+names the comparison from the run's own `control_method` rather than asserting one.
+
+**Known limitations of the control design.** Two are worth stating plainly, because neither is fixed
+by any amount of code hygiene:
+
+- The thermal fallback ring sits 450 m from a 250 m site core inside a single AOI whose widest span
+  is about 1.1 km. For a facility of this size that ring is inside the plume and the paved footprint,
+  so it is a *local outer ring*, which is what the code and the labels call it. It is not a regional
+  control and the difference against it will understate a real effect.
+- Candidates are matched on the site's **latest** land cover. If the buildout being measured is what
+  changed that land cover, the most similar candidate is the one that also built out, which biases
+  the comparison toward zero. Matching on baseline-year covariates would be the correct design and
+  is not what this code does today.
 
 The historical provider requests one expanded AOI per year and analytic type. It calculates the site
 core and each selected control core independently, then gives the three control-zone means equal
@@ -312,7 +417,15 @@ supply one to twelve alternative candidates.
 
 The first stage makes only baseline and latest July `tcm` requests and calculates local
 difference-in-differences against a disclosed outer ring. By default, only sites at or above `0.10°C`
-are shortlisted. The second stage runs the configured satellite provider, requires all three selected
+are shortlisted.
+
+**Known limitation.** That screen is one-sided and uncorrected for multiplicity: it takes the maximum
+of k independent estimates against a fixed threshold, so with twelve candidates a portfolio with no
+real effect anywhere still produces a qualified winner most of the time at plausible noise levels,
+and the winner's reported drift is the maximum order statistic and therefore biased upward. Read a
+shortlist as a list of sites worth looking at, never as evidence that the leader is warming.
+
+The second stage runs the configured satellite provider, requires all three selected
 controls to clear the land-cover match threshold, requires distinct historical land-cover coverage,
 and then runs the complete annual
 sequence against those controls using the existing July screening methodology. A site is a winner
@@ -326,9 +439,11 @@ curl -s -X POST http://127.0.0.1:8000/agent-tools/site-discovery \
 ```
 
 Fixture mode demonstrates the complete positive path and clearly labels all thermal outputs as
-simulated. It currently selects ACC5 with a simulated `0.486°C` validated drift and `0.950` control
-match; these are not claims about Digital Realty. In the verified live screen, ACC5 measured
-`0.0069°C` and the other three candidates were effectively flat, so the correct live result is
+simulated. Its figures come from a fixed synthetic trend and do not vary with the coordinates
+supplied; they are not claims about any operator. In the verified live screen, ACC5 measured
+`0.0069°C`, which sits well inside the noise this estimator produces under a null effect and should
+be read as no detected drift rather than as a small one. The other three candidates were
+effectively flat, so the correct live result is
 `no_qualified_candidate` and Satellite deep validation is not invoked. This negative result is an
 important integrity feature, not a hidden fallback.
 

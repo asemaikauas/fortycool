@@ -24,7 +24,7 @@
     const retained = optimizerEvidence?.metadata?.safe_candidate_count;
     div.className = `p-stack-md bg-surface border ${safe ? "border-primary" : "border-safety-critical"}`;
     div.innerHTML = `
-      <div class="flex justify-between items-start mb-stack-sm"><span class="text-label-sm font-label-sm text-status-inferred bg-status-inferred/10 px-unit py-[2px] border-l border-status-inferred">${FortyCoolAPI.escapeHTML(humanize(recommendation.verdict))}</span><span class="text-label-sm font-label-sm text-on-surface-variant">Conf: ${Math.round(recommendation.confidence * 100)}%</span></div>
+      <div class="flex justify-between items-start mb-stack-sm"><span class="text-label-sm font-label-sm text-status-inferred bg-status-inferred/10 px-unit py-[2px] border-l border-status-inferred">${FortyCoolAPI.escapeHTML(humanize(recommendation.verdict))}</span><span class="text-label-sm font-label-sm text-on-surface-variant" title="Model fit score, not a probability that the action is correct">Fit score: ${FortyCoolAPI.formatNumber(recommendation.confidence, 2)}</span></div>
       <h4 class="text-body-lg font-body-lg text-primary font-medium mb-unit">${FortyCoolAPI.escapeHTML(humanize(recommendation.action))}</h4>
       <p class="text-label-sm font-label-sm text-on-surface-variant mb-stack-md">${FortyCoolAPI.escapeHTML(recommendation.description)}</p>
       <div class="grid grid-cols-2 gap-unit text-label-sm font-label-sm"><div><p class="text-on-surface-variant">Candidates</p><p class="text-primary font-medium">${evaluated ?? "—"} evaluated</p></div><div><p class="text-on-surface-variant">Safe</p><p class="text-primary font-medium">${retained ?? "—"} retained</p></div></div>`;
@@ -54,7 +54,10 @@
     const max = Math.max(...values);
     el("actualBacktestLine").setAttribute("points", points(actual, min, max));
     el("predictedBacktestLine").setAttribute("points", points(predicted, min, max));
-    el("backtestSubtitle").textContent = `${chart.title} · ${humanize(chart.data_class)} · ${chart.data.length} held-out hours`;
+    const buffer = run.metricsById.inlet_safety_buffer_c;
+    el("backtestSubtitle").textContent =
+      `${chart.title} · ${humanize(chart.data_class)} · ${chart.data.length} held-out hours`
+      + (buffer ? ` · safety buffer ${FortyCoolAPI.formatNumber(buffer.value, 3)}°C (95th percentile, cross-validated)` : "");
     el("coolingMae").textContent = coolingMae ? `${FortyCoolAPI.formatNumber(coolingMae.value, 1)} kW` : "—";
     el("inletMae").textContent = inletMae ? `${FortyCoolAPI.formatNumber(inletMae.value, 3)}°C` : "—";
   }

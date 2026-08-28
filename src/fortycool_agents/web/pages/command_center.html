@@ -5,10 +5,10 @@
 <script>(function(){try{var t=localStorage.getItem('fortycool-theme')||'dark';document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();</script>
 <link href="../css/theme-vars.css" rel="stylesheet"/>
 <title>FortyCool — Agent Command Center</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link crossorigin="" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="../vendor/tailwind/tailwind.js"></script>
+<link crossorigin="" href="../vendor/leaflet/leaflet.css" rel="stylesheet"/>
+<link href="../vendor/fonts/symbols.css" rel="stylesheet"/>
+<link href="../vendor/fonts/geist.css" rel="stylesheet"/>
 <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -130,9 +130,26 @@
 </div>
 </header>
 <main class="ml-[248px] mt-16 p-margin-desktop h-[calc(100vh-4rem)] w-[calc(100%-248px)] overflow-y-auto flex flex-col gap-gutter">
+<!--
+  Caveat banner. The run's warnings and assumptions previously appeared only as
+  counts on this screen and in full only inside the downloaded PDF, so the one
+  sentence saying the controls were simulated never reached the person reading
+  the numbers.
+-->
+<div class="hidden data-card p-4 border-l-2 border-safety-warning shrink-0" id="caveatPanel">
+<div class="flex items-center justify-between mb-2">
+<div class="text-label-sm font-label-sm text-safety-warning uppercase tracking-widest" id="caveatHeading">What this run does not establish</div>
+<button class="text-label-sm font-label-sm text-on-surface-variant hover:text-primary underline" id="caveatToggle" type="button">Show all</button>
+</div>
+<ul class="list-disc pl-5 text-label-md font-label-md text-on-surface space-y-1" id="caveatList"></ul>
+<div class="hidden mt-3 pt-3 border-t border-outline-variant" id="assumptionBlock">
+<div class="text-label-sm font-label-sm text-status-assumed uppercase tracking-widest mb-1" id="assumptionHeading">Unconfirmed assumptions</div>
+<ul class="list-disc pl-5 text-label-md font-label-md text-on-surface-variant space-y-1" id="assumptionList"></ul>
+</div>
+</div>
 <div class="grid grid-cols-2 xl:grid-cols-4 gap-stack-md shrink-0">
 <div class="data-card p-4 border-l-2 border-status-inferred"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Local thermal drift</div><div class="text-headline-md text-primary mt-1" id="kpiDrift">—</div><div class="text-label-sm font-label-sm text-status-inferred" id="kpiDriftClass">Awaiting analysis</div></div>
-<div class="data-card p-4 border-l-2 border-status-inferred"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Eligible hours lost</div><div class="text-headline-md text-primary mt-1" id="kpiHours">—</div><div class="text-label-sm font-label-sm text-status-inferred">hours / year</div></div>
+<div class="data-card p-4 border-l-2 border-status-inferred"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Eligible hours lost</div><div class="text-headline-md text-primary mt-1" id="kpiHours">—</div><div class="text-label-sm font-label-sm text-status-inferred" id="kpiHoursClass">hours / year</div></div>
 <div class="data-card p-4 border-l-2 border-status-inferred"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Local excess buildout</div><div class="text-headline-md text-primary mt-1" id="kpiBuilt">—</div><div class="text-label-sm font-label-sm text-status-inferred">percentage points</div></div>
 <div class="data-card p-4 border-l-2 border-status-assumed"><div class="text-label-sm font-label-sm text-on-surface-variant uppercase">Lease-life exposure</div><div class="text-headline-md text-primary mt-1" id="kpiNpv">—</div><div class="text-label-sm font-label-sm text-status-assumed" id="kpiNpvClass">Indicative NPV</div></div>
 </div>
@@ -258,6 +275,6 @@
 </div>
 </main>
 <script src="../js/api.js"></script>
-<script crossorigin="" src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../vendor/leaflet/leaflet.js"></script>
 <script src="../js/pages/command_center.js"></script>
 </body></html>

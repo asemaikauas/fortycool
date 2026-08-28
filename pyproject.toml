@@ -14,7 +14,9 @@ dependencies = [
   "numpy>=2,<3",
   "pandas>=2.2,<3",
   "pydantic>=2.10,<3",
-  "reportlab>=4,<6",
+  # <6 pre-approved a reportlab 5.x that does not exist yet, so a future major
+  # release would install itself into the build with no review.
+  "reportlab>=4,<5",
   "uvicorn>=0.34,<1",
 ]
 
@@ -28,7 +30,17 @@ fortycool = "fortycool_agents.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-fortycool_agents = ["web/**/*.html", "web/**/*.css", "web/**/*.js"]
+# The dashboard's third-party assets are vendored under web/vendor so the page
+# renders on a venue network that blocks or throttles a CDN. They have to ship
+# with the package or an installed copy loads unstyled.
+fortycool_agents = [
+  "web/**/*.html",
+  "web/**/*.css",
+  "web/**/*.js",
+  "web/**/*.png",
+  "web/**/*.svg",
+  "web/**/*.woff2",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

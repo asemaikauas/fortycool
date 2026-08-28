@@ -1,10 +1,68 @@
 from __future__ import annotations
 
+import math
+import unicodedata
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+# The analysis window used to end at a literal 2026 in three separate places, so
+# in 2027 the "latest" year would silently stay 2026 forever and a newer
+# baseline could not even be requested. The ceiling now follows the calendar.
+EARLIEST_ANALYSIS_YEAR = 2019
+SCHEMA_MAX_ANALYSIS_YEAR = 2100
+
+
+def latest_analysis_year() -> int:
+    """The newest calendar year an analysis window may reach."""
+
+    return datetime.now(timezone.utc).year
+
+
+# Retained for callers that imported the old name; it now tracks the calendar.
+MAX_ANALYSIS_YEAR = latest_analysis_year()
+
+# Guard rail for numbers that reach a report, a chart, or the copilot. A value
+# outside this band is a corrupt input rather than a facility measurement, and
+# persisting one poisons every later read of the run.
+MAX_REPORTABLE_MAGNITUDE = 1e12
+
+
+def reject_non_finite(value: Any, field_name: str) -> Any:
+    """Reject NaN, infinities, and absurd magnitudes on a reported number."""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"{field_name} must be a finite number")
+        if abs(value) > MAX_REPORTABLE_MAGNITUDE:
+            raise ValueError(
+                f"{field_name} exceeds the reportable magnitude limit "
+                f"({MAX_REPORTABLE_MAGNITUDE:g})"
+            )
+    return value
+
+
+def reject_control_characters(value: str, field_name: str) -> str:
+    """Reject free text that could render as something else downstream.
+
+    Bidi overrides and C0/C1 controls are not typographic detail here: they are
+    the cheapest way to make one string display as another inside a PDF or a
+    model prompt, and none of them belong in a facility name.
+    """
+
+    for character in value:
+        if character in {" ", "\t"}:
+            continue
+        if unicodedata.category(character) in {"Cc", "Cf", "Co", "Cs", "Cn"}:
+            raise ValueError(
+                f"{field_name} may not contain control or formatting characters"
+            )
+    return value
 
 
 class AnalysisMode(str, Enum):
@@ -42,6 +100,42 @@ class ConfidenceTier(str, Enum):
     OPERATIONAL = "operational"
 
 
+class EvidenceGrade(str, Enum):
+    """How well a reported number is backed, on an ordinal scale.
+
+    A: measured by a named external source over the whole analysis window.
+    B: derived or partially measured - real inputs, modelled combination.
+    C: simulated, assumed, or without a sampling-error estimate.
+    """
+
+    A = "A"
+    B = "B"
+    C = "C"
+
+
+class WarningCode(str, Enum):
+    """Stable identifiers for caveats that consumers need to branch on.
+
+    Run status and warning suppression used to be decided by searching for
+    substrings inside human-readable warnings, so rewording a sentence changed
+    program behaviour. These codes carry the meaning; the sentences stay for
+    people to read.
+    """
+
+    EVIDENCE_VERIFICATION_FAILED = "evidence_verification_failed"
+    CONTROL_STABILITY_UNVERIFIED = "control_stability_unverified"
+    THERMAL_SERIES_BACKCAST = "thermal_series_backcast"
+    THERMAL_SERIES_SIMULATED = "thermal_series_simulated"
+    FIXTURE_SERIES_LOCATION_INDEPENDENT = "fixture_series_location_independent"
+    SATELLITE_STAGE_UNAVAILABLE = "satellite_stage_unavailable"
+    TELEMETRY_INTERPOLATED = "telemetry_interpolated"
+    TELEMETRY_NOT_FOUND = "telemetry_not_found"
+    SPATIAL_FALLBACK_ZONES = "spatial_fallback_zones"
+    DRIFT_NOT_DISTINGUISHABLE = "drift_not_distinguishable_from_zero"
+    ATTRIBUTION_WITHHELD = "attribution_withheld"
+    CIRCULAR_SENSITIVITY_CONSTANT = "circular_sensitivity_constant"
+
+
 class JobState(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -71,12 +165,87 @@ class DiscoveryStatus(str, Enum):
     NO_QUALIFIED_CANDIDATE = "no_qualified_candidate"
 
 
+# A facility AOI is a building footprint plus a control ring, not a region. The
+# caps below are what a 60 m heatmap request can reasonably cover; anything
+# larger is a mistake or an attempt to make one request cost a hundred.
+MAX_AOI_VERTICES = 2_000
+MAX_AOI_SPAN_DEGREES = 1.0
+
+
+def _aoi_coordinates(geometry: Any) -> list[tuple[float, float]]:
+    """Flatten every coordinate pair reachable from a GeoJSON geometry."""
+
+    points: list[tuple[float, float]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, (list, tuple)):
+            if (
+                len(node) >= 2
+                and all(isinstance(item, (int, float)) for item in node[:2])
+                and not isinstance(node[0], bool)
+            ):
+                points.append((float(node[0]), float(node[1])))
+                return
+            for item in node:
+                walk(item)
+
+    walk(geometry)
+    return points
+
+
 class SiteInput(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     aoi: dict[str, Any] | None = None
     timezone: str = "America/New_York"
+
+    @field_validator("name")
+    @classmethod
+    def name_must_be_printable(cls, value: str) -> str:
+        return reject_control_characters(value, "site.name")
+
+    @field_validator("aoi")
+    @classmethod
+    def aoi_must_be_a_bounded_polygon(
+        cls, value: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Validate the caller-supplied AOI at the door rather than upstream.
+
+        An unrecognised shape used to surface as a 500 from inside the provider,
+        and an unbounded polygon became a planet-scale 60 m heatmap request.
+        Both are request errors, so they belong here as a 422.
+        """
+
+        if value is None:
+            return value
+        aoi_type = value.get("type")
+        if aoi_type not in {"FeatureCollection", "Feature", "Polygon"}:
+            raise ValueError(
+                "site.aoi must be a GeoJSON Polygon, Feature, or FeatureCollection"
+            )
+        points = _aoi_coordinates(value)
+        if not points:
+            raise ValueError("site.aoi did not contain any coordinates")
+        if len(points) > MAX_AOI_VERTICES:
+            raise ValueError(
+                f"site.aoi may not contain more than {MAX_AOI_VERTICES:,} vertices"
+            )
+        longitudes = [point[0] for point in points]
+        latitudes = [point[1] for point in points]
+        if not all(-180 <= longitude <= 180 for longitude in longitudes) or not all(
+            -90 <= latitude <= 90 for latitude in latitudes
+        ):
+            raise ValueError("site.aoi coordinates fall outside valid WGS84 bounds")
+        span = max(
+            max(longitudes) - min(longitudes), max(latitudes) - min(latitudes)
+        )
+        if span > MAX_AOI_SPAN_DEGREES:
+            raise ValueError(
+                "site.aoi bounding box may not span more than "
+                f"{MAX_AOI_SPAN_DEGREES} degrees; supply a facility-scale area"
+            )
+        return value
 
 
 class FacilityProfile(BaseModel):
@@ -104,6 +273,13 @@ class EconomicsInput(BaseModel):
     horizon_years: int | None = Field(default=None, ge=1, le=40)
     discount_rate: float | None = Field(default=None, ge=0, le=0.5)
     annual_tariff_inflation: float | None = Field(default=None, ge=-0.1, le=0.5)
+    # Cooling-energy response to one degree of sustained local warming, as a
+    # fraction of the cooling-plant load. It is an operator input, not a
+    # property the analysis discovers, so it is stated here and recorded as an
+    # assumption when it falls back to the default.
+    temperature_sensitivity_per_c: float | None = Field(
+        default=None, ge=0, le=0.5
+    )
 
 
 class SafetyConstraints(BaseModel):
@@ -128,7 +304,7 @@ class SafetyConstraints(BaseModel):
 
 class SimulationConfig(BaseModel):
     enabled: bool = True
-    seed: int = 42
+    seed: int = Field(default=42, ge=0, le=2**32 - 1)
     history_days: int = Field(default=60, ge=14, le=730)
     interval_minutes: int = Field(default=60, ge=15, le=60)
     forecast_hours: int = Field(default=12, ge=1, le=12)
@@ -162,7 +338,9 @@ class AnalysisRequest(BaseModel):
     constraints: SafetyConstraints = Field(default_factory=SafetyConstraints)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
-    baseline_year: int = Field(default=2022, ge=2019, le=2026)
+    baseline_year: int = Field(
+        default=2022, ge=EARLIEST_ANALYSIS_YEAR, le=SCHEMA_MAX_ANALYSIS_YEAR
+    )
     temperature_eligibility_threshold_c: float = Field(default=18.0, ge=-30, le=50)
     use_demo_defaults: bool = True
 
@@ -172,6 +350,23 @@ class AnalysisRequest(BaseModel):
         if not value:
             raise ValueError("at least one analysis mode is required")
         return list(dict.fromkeys(value))
+
+    @model_validator(mode="after")
+    def baseline_year_must_leave_a_window(self) -> "AnalysisRequest":
+        """A baseline equal to the latest year leaves a one-point series.
+
+        The drift estimator needs at least two annual observations, so a
+        baseline at the end of the window is a request error and must be
+        rejected at the door rather than raising from inside the agents.
+        """
+
+        latest = latest_analysis_year()
+        if self.baseline_year >= latest:
+            raise ValueError(
+                "baseline_year must be earlier than the latest analysis year "
+                f"({latest}) so the drift series has at least two points"
+            )
+        return self
 
 
 class EvidenceRef(BaseModel):
@@ -194,6 +389,19 @@ class Metric(BaseModel):
     data_class: DataClass
     evidence_ids: list[str] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
+    # Ordinal grade shown to users. `confidence` is a hand-set internal score
+    # and was being rendered as a percentage next to money, which reads as a
+    # probability it never was.
+    evidence_grade: EvidenceGrade | None = None
+    # Two-sided 95% interval where the estimator supports one. Absent means the
+    # quantity has no sampling-error estimate, not that it is exact.
+    interval_low: float | None = None
+    interval_high: float | None = None
+
+    @field_validator("value", "interval_low", "interval_high")
+    @classmethod
+    def value_must_be_finite(cls, value: Any) -> Any:
+        return reject_non_finite(value, "metric value")
 
 
 class Recommendation(BaseModel):
@@ -208,6 +416,16 @@ class Recommendation(BaseModel):
     verdict: SafetyVerdict
     constraints_checked: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
+
+    @field_validator(
+        "expected_savings_kwh",
+        "expected_peak_reduction_kw",
+        "predicted_max_inlet_temperature_c",
+        "safety_margin_c",
+    )
+    @classmethod
+    def numbers_must_be_finite(cls, value: float) -> float:
+        return reject_non_finite(value, "recommendation value")
 
 
 class Chart(BaseModel):
@@ -248,6 +466,11 @@ class AnalysisResponse(BaseModel):
     trace: list[TraceEvent] = Field(default_factory=list)
     assumptions: list[Assumption] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Machine-readable caveats. `warnings` stays a list of sentences for
+    # people; consumers that need to branch read these instead of matching on
+    # prose, and `degraded_stages` names any pipeline stage that did not run.
+    warning_codes: list[str] = Field(default_factory=list)
+    degraded_stages: list[str] = Field(default_factory=list)
 
 
 class VerifiedDemoResponse(BaseModel):
@@ -302,6 +525,10 @@ class CopilotDraft(BaseModel):
 
 
 class CopilotResponse(CopilotDraft):
+    # The draft caps what the model may return. The response also carries the
+    # run's own warnings and safety verdicts, appended by the service so they
+    # cannot be dropped or softened, so it needs the wider bound.
+    cautions: list[str] = Field(default_factory=list, max_length=40)
     run_id: str
     model: str
     response_id: str
@@ -323,8 +550,12 @@ class PublicSiteCandidate(BaseModel):
 
 class DiscoveryRequest(BaseModel):
     candidates: list[PublicSiteCandidate] | None = None
-    baseline_year: int = Field(default=2022, ge=2019, le=2026)
-    end_year: int = Field(default=2026, ge=2020, le=2026)
+    baseline_year: int = Field(
+        default=2022, ge=EARLIEST_ANALYSIS_YEAR, le=SCHEMA_MAX_ANALYSIS_YEAR
+    )
+    end_year: int = Field(
+        default_factory=latest_analysis_year, ge=2020, le=SCHEMA_MAX_ANALYSIS_YEAR
+    )
     minimum_local_drift_c: float = Field(default=0.10, ge=0, le=5)
     minimum_control_match_score: float = Field(default=0.65, ge=0, le=1)
     shortlist_size: int = Field(default=1, ge=1, le=3)
@@ -336,6 +567,11 @@ class DiscoveryRequest(BaseModel):
     def validate_discovery_scope(self) -> "DiscoveryRequest":
         if self.end_year <= self.baseline_year:
             raise ValueError("end_year must be later than baseline_year")
+        latest = latest_analysis_year()
+        if self.end_year > latest:
+            raise ValueError(
+                f"end_year cannot exceed the current calendar year ({latest})"
+            )
         if self.candidates is not None:
             if not 1 <= len(self.candidates) <= 12:
                 raise ValueError("candidates must contain between 1 and 12 sites")
