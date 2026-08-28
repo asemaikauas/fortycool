@@ -4,6 +4,14 @@
 # each build resolved to whatever was newest on PyPI at the time and a
 # compromised release inside the range would install silently.
 #
+# RESOLVED FOR: cpython 3.13 on darwin arm64
+#
+# The hashes below are for the wheels that fit that interpreter and platform.
+# numpy, pandas and reportlab ship platform-specific wheels, so running
+# --require-hashes on a different OS, architecture, or Python version fails with
+# a hash mismatch. That is the lock working, not a corrupt file: regenerate it
+# on the target platform, or install from pyproject.toml there instead.
+#
 # Regenerate with:
 #   python -m pip install --dry-run --ignore-installed --report report.json <requirements>
 #   python scripts/write_lock.py report.json > requirements.lock

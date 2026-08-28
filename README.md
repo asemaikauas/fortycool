@@ -226,6 +226,13 @@ shortlist of one, because a full request costs roughly ninety paid upstream acti
 upload can land on one worker and its run on another, and the analysis then proceeds silently on
 simulated data instead of the customer's telemetry, which is a wrong answer rather than an error.
 
+## Continuous integration
+
+`.github/workflows/tests.yml` runs the suite on every push and pull request across Python 3.11,
+3.12, and 3.13, and checks that the vendored dashboard assets are present and that no page has
+drifted back to loading from a CDN. Before this the tests existed only on a developer's machine, so
+the merge box could say "no conflicts" while nothing had verified anything.
+
 ## Reproducible installs
 
 ```bash
@@ -234,6 +241,12 @@ pip install --require-hashes -r requirements.lock
 
 The declared dependencies are open ranges, so an unpinned build resolves to whatever is newest on
 PyPI. Regenerate the lock with `scripts/write_lock.py` after changing `pyproject.toml`.
+
+The lock names the interpreter and platform it was resolved for in its header. numpy, pandas, and
+reportlab publish platform-specific wheels, so `--require-hashes` on a different OS, architecture,
+or Python version fails with a hash mismatch. That is the lock doing its job: regenerate it on the
+target platform, or install from `pyproject.toml` there. CI installs from `pyproject.toml` for
+exactly this reason, which also surfaces an upstream release that breaks us.
 
 ## Dashboard assets
 
