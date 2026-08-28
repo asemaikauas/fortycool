@@ -48,6 +48,13 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+      - name: Audit dependencies for known vulnerabilities
+        # Catches an advisory landing on something we already depend on, which
+        # is otherwise invisible until someone thinks to look. Not --strict:
+        # that also fails on packages pip-audit cannot resolve, and this project
+        # itself is not published to PyPI, so every run would be red.
+        run: python -m pip_audit --progress-spinner off
+
       - name: Check the vendored dashboard assets are present
         # The dashboard loads Tailwind, Leaflet and its fonts from this
         # directory rather than from a CDN. If it goes missing the page still

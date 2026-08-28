@@ -628,3 +628,69 @@ def test_fixture_runs_declare_that_coordinates_do_not_change_the_result(
     assert (
         WarningCode.FIXTURE_SERIES_LOCATION_INDEPENDENT.value in body["warning_codes"]
     )
+
+
+# ---------------------------------------------------------------------------
+# Exposure surface: headers, docs, and identity behind a proxy
+# ---------------------------------------------------------------------------
+
+
+def test_every_response_carries_the_security_headers(client: TestClient) -> None:
+    """The dashboard is reachable from the internet the moment it is tunnelled.
+
+    Its JS escapes every server string it renders, but that is one function
+    standing between an operator and a scripted page, and nothing stopped the
+    whole app being framed inside someone else's.
+    """
+
+    response = client.get("/dashboard/pages/command_center.html")
+    assert response.status_code == 200
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+    # The map still needs its tile host, and nothing else may load scripts.
+    policy = response.headers["Content-Security-Policy"]
+    assert "tile.openstreetmap.org" in policy
+    assert "script-src 'self' 'unsafe-inline'" in policy
+
+
+def test_the_api_console_is_not_served_by_default(client: TestClient) -> None:
+    """/docs is an interactive driver for the endpoints that spend money."""
+
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404, path
+
+
+def test_forged_forwarded_headers_cannot_buy_a_fresh_rate_limit_bucket() -> None:
+    """Reading X-Forwarded-For unconditionally is worse than ignoring it.
+
+    With no proxy declared the transport peer is the only identity, so a client
+    inventing an address per request stays in one bucket.
+    """
+
+    from starlette.datastructures import Headers
+    from starlette.requests import Request
+
+    def make(headers: dict[str, str]) -> Request:
+        scope = {
+            "type": "http",
+            "headers": Headers(headers).raw,
+            "client": ("203.0.113.9", 12345),
+        }
+        return Request(scope)
+
+    forged = make({"x-forwarded-for": "1.1.1.1, 2.2.2.2"})
+    assert security.client_address(forged, trusted_hops=0) == "203.0.113.9"
+
+    # One declared proxy: use the entry that proxy actually observed, which is
+    # the right-most one. Anything the caller prepended sits to its left.
+    behind_one = make({"x-forwarded-for": "9.9.9.9, 198.51.100.7"})
+    assert security.client_address(behind_one, trusted_hops=1) == "198.51.100.7"
+
+    # A chain shorter than the declared hop count must not reach past its start.
+    short = make({"x-forwarded-for": "198.51.100.7"})
+    assert security.client_address(short, trusted_hops=3) == "198.51.100.7"
+
+    # No header at all falls back to the peer rather than failing open.
+    assert security.client_address(make({}), trusted_hops=2) == "203.0.113.9"

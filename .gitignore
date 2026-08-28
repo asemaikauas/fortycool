@@ -9,3 +9,15 @@ __pycache__/
 output/pdf/*.pdf
 tmp/
 *.egg-info/
+
+# Credentials. The README tells you to authenticate Earth Engine with a Google
+# service-account key and never to commit it; nothing here enforced that, so a
+# key dropped into the working tree was one `git add .` away from the remote.
+.env.*
+!.env.example
+*.pem
+*.key
+*-key.json
+*credentials*.json
+service-account*.json
+gcloud-*.json

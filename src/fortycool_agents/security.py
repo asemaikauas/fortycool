@@ -31,6 +31,18 @@ from starlette.types import ASGIApp
 API_KEY_HEADER = "X-API-Key"
 API_KEY_ENV = "FORTYCOOL_API_KEY"
 
+# Number of trusted proxies in front of this service. Behind a tunnel or a load
+# balancer every request arrives from the proxy's own address, so per-caller
+# rate limiting collapses into a single shared bucket: one abuser exhausts the
+# allowance for every visitor, and no individual attacker is limited at all.
+#
+# Reading X-Forwarded-For unconditionally would be worse - any client could
+# forge a fresh identity per request and never be limited - so the header is
+# trusted only when the operator states how many proxies to trust, and only the
+# entry that many hops from the right is used. Anything an attacker appends
+# sits to the LEFT of the proxy's own entry and is ignored.
+TRUSTED_PROXY_HOPS = int(os.getenv("FORTYCOOL_TRUSTED_PROXY_HOPS", 0))
+
 # Ceiling on any request body. The telemetry route used to read the whole body
 # into memory and only then compare it with the 10 MB limit, so a 300 MB body
 # allocated roughly twice its size before being rejected.
@@ -119,14 +131,37 @@ class SlidingWindowRateLimiter:
             self._hits.clear()
 
 
+def client_address(request: Request, *, trusted_hops: int | None = None) -> str:
+    """The caller's address, accounting for a declared number of proxies.
+
+    With `trusted_hops = 0` (the default) only the transport peer is used, so a
+    forged header cannot buy an attacker a fresh bucket. With `trusted_hops = 1`
+    the entry one position from the right of X-Forwarded-For is used, which is
+    the address the single trusted proxy observed.
+    """
+
+    hops = TRUSTED_PROXY_HOPS if trusted_hops is None else trusted_hops
+    peer = request.client.host if request.client else "unknown"
+    if hops <= 0:
+        return peer
+    forwarded = request.headers.get("x-forwarded-for", "")
+    chain = [item.strip() for item in forwarded.split(",") if item.strip()]
+    if not chain:
+        return peer
+    # The right-most entry was added by the nearest proxy. Step left by the
+    # number of proxies the operator says are trustworthy, and clamp so a short
+    # chain cannot reach into attacker-controlled territory.
+    index = max(0, len(chain) - hops)
+    return chain[index] if index < len(chain) else chain[0]
+
+
 def caller_identity(request: Request) -> str:
-    """Identify the caller by API key when present, otherwise by client host."""
+    """Identify the caller by API key when present, otherwise by address."""
 
     supplied = request.headers.get(API_KEY_HEADER)
     if supplied:
         return f"key:{supplied[:16]}"
-    client = request.client
-    return f"ip:{client.host}" if client else "ip:unknown"
+    return f"ip:{client_address(request)}"
 
 
 rate_limiter = SlidingWindowRateLimiter()
@@ -166,6 +201,56 @@ guard_analysis = _guard(EXPENSIVE_RULE)
 guard_copilot = _guard(COPILOT_RULE)
 guard_upload = _guard(UPLOAD_RULE)
 guard_read = _guard(READ_RULE)
+
+
+# Map tiles are the one runtime host the dashboard still needs; everything else
+# is vendored and served from this origin.
+_TILE_HOST = "https://*.tile.openstreetmap.org"
+
+# 'unsafe-inline' is required and deliberate: each page carries a small inline
+# theme script to avoid a flash of the wrong theme, the site-setup page uses one
+# inline handler, and the vendored Tailwind build injects styles at runtime.
+# The policy still removes the things that matter most here - no third-party
+# script origins, no framing, and no outbound connections other than to this
+# service.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    f"img-src 'self' data: {_TILE_HOST}; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    # Defence in depth against clickjacking for browsers that predate CSP's
+    # frame-ancestors.
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Attach the response headers a publicly reachable dashboard needs.
+
+    The dashboard escapes every server-supplied string it renders, but that is
+    one function standing between an operator and a scripted page. These headers
+    are the layer underneath it, and they cost nothing.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        for header, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+        return response
 
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):

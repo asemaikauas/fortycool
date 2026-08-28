@@ -21,7 +21,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+# The <9 pin excluded the release that fixes PYSEC-2026-1845, so the cap moves
+# rather than holding the suite on a version with a known advisory.
+dev = ["pytest>=9.0.3,<10", "pip-audit>=2.7,<3"]
 
 [project.scripts]
 fortycool = "fortycool_agents.cli:main"

@@ -46,6 +46,7 @@ from .models import (
 from .orchestrator import FortyCoolOrchestrator
 from .security import (
     BodySizeLimitMiddleware,
+    SecurityHeadersMiddleware,
     api_key_required,
     guard_analysis,
     guard_copilot,
@@ -58,11 +59,27 @@ from .telemetry import TelemetryStore, TelemetryValidationError
 
 logger = logging.getLogger(__name__)
 
+# The interactive API console and the schema dump are convenient locally and a
+# free map of every money-spending endpoint once the service is reachable from
+# the internet. Off unless the operator asks for them.
+_DOCS_ENABLED = os.getenv("FORTYCOOL_ENABLE_DOCS", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
 app = FastAPI(
     title="FortyCool Agent Service",
     version="0.1.0",
     description="Evidence-first thermal decision tools for a hybrid data-center digital twin.",
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
+# Outermost first: headers are attached to every response, including the ones
+# the size limiter short-circuits.
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 
 

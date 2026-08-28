@@ -218,6 +218,40 @@ on. Authentication is opt-in so a local checkout still runs keyless:
 | `FORTYCOOL_MAX_UPLOADS` / `FORTYCOOL_UPLOAD_TTL_SECONDS` | 32 / 3600 | Telemetry retention |
 | `FORTYCOOL_MAX_JOBS` / `FORTYCOOL_JOB_TTL_SECONDS` | 256 / 3600 | Job retention |
 | `FORTYCOOL_MAX_RETAINED_RUNS` | 2000 | Rows kept in the SQLite run store |
+| `FORTYCOOL_TRUSTED_PROXY_HOPS` | 0 | Proxies in front of the service; see below |
+| `FORTYCOOL_ENABLE_DOCS` | unset | Serves `/docs`, `/redoc`, `/openapi.json` |
+
+**Behind a proxy, set `FORTYCOOL_TRUSTED_PROXY_HOPS`.** Every request through a
+tunnel or load balancer arrives from the proxy's own address, so per-caller rate
+limiting collapses into one shared bucket: a single abuser exhausts the
+allowance for every visitor and no individual attacker is limited at all.
+Measured on a Cloudflare quick tunnel, 22 requests declaring 22 different client
+addresses all landed in the same bucket. Set the value to the number of proxies
+you actually run (`1` behind a single tunnel) and the entry that many hops from
+the right of `X-Forwarded-For` is used. The default of `0` ignores the header
+entirely, because trusting it unconditionally is worse than ignoring it: a
+client could forge a fresh identity per request and never be limited.
+
+**The API console is off unless you ask for it.** `/docs`, `/redoc`, and
+`/openapi.json` are an interactive driver for the endpoints that spend money and
+a complete map of the service. Set `FORTYCOOL_ENABLE_DOCS=1` locally when you
+want them.
+
+**Response headers.** Every response carries a content-security policy,
+`X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, and a
+restrictive permissions policy. The dashboard escapes every server-supplied
+string it renders; these are the layer underneath that. The policy permits
+inline scripts and styles because each page carries a small inline theme script
+and the vendored Tailwind build injects styles at runtime, and it permits
+`*.tile.openstreetmap.org` for map tiles. Nothing else may load a script or
+receive a connection.
+
+**Exposing this publicly.** A tunnel or a deploy makes every endpoint reachable.
+Do not set `FORTYGUARD_API_KEY` or `OPENAI_API_KEY` on a publicly reachable
+instance without also setting `FORTYCOOL_API_KEY`, or the copilot endpoint bills
+your account to anyone who finds the URL. Note that the browser dashboard does
+not send an API-key header, so enabling authentication protects the API and
+disables the UI.
 
 Without an API key, `POST /agent-tools/site-discovery` accepts at most four candidates and a
 shortlist of one, because a full request costs roughly ninety paid upstream activities.
