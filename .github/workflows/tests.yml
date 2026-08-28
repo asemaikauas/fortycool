@@ -42,7 +42,10 @@ jobs:
         # machine that generated it and would fail here. Resolving the declared
         # ranges also surfaces an upstream release that breaks us.
         run: |
-          python -m pip install --upgrade pip
+          # setuptools and pip come preinstalled on the runner and are old
+          # enough on some images to carry their own advisories, which the audit
+          # step below correctly refuses to ignore.
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install -e ".[dev]"
 
       - name: Run tests

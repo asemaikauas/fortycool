@@ -1,5 +1,7 @@
 [build-system]
-requires = ["setuptools>=75", "wheel"]
+# >=83 rather than >=75: PYSEC-2026-3447 affects earlier releases, and some CI
+# images still ship one.
+requires = ["setuptools>=83", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
