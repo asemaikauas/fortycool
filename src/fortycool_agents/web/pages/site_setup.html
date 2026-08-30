@@ -6,6 +6,7 @@
 <link href="../css/theme-vars.css" rel="stylesheet"/>
 <title>FortyCool - Site Setup</title>
 <script src="../vendor/tailwind/tailwind.js"></script>
+<link crossorigin="" href="../vendor/leaflet/leaflet.css" rel="stylesheet"/>
 <link href="../vendor/fonts/symbols.css" rel="stylesheet"/>
 <link href="../vendor/fonts/geist.css" rel="stylesheet"/>
 <script id="tailwind-config">
@@ -58,11 +59,23 @@
         ::-webkit-scrollbar-track { background: rgb(var(--color-surface-container-lowest)); }
         ::-webkit-scrollbar-thumb { background: rgb(var(--color-outline-variant)); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: rgb(var(--color-outline)); }
-        .heatmap-overlay {
-            background: radial-gradient(circle at 30% 40%, rgb(var(--color-safety-critical)) 0%, transparent 20%),
-                        radial-gradient(circle at 70% 60%, rgb(var(--color-safety-warning)) 0%, transparent 25%),
-                        radial-gradient(circle at 50% 50%, rgb(var(--color-chart-cooling-start)) 0%, transparent 40%);
-            opacity: 0.6; mix-blend-mode: screen;
+        #siteMap { background: rgb(var(--color-surface-container-lowest)); }
+        #siteMap .leaflet-control-zoom a,
+        #siteMap .leaflet-control-attribution {
+            background: rgb(var(--color-surface) / 0.92);
+            color: rgb(var(--color-on-surface));
+            border-color: rgb(var(--color-outline-variant));
+        }
+        #siteMap .leaflet-control-zoom a:hover { background: rgb(var(--color-surface-container-high)); }
+        #siteMap .leaflet-control-attribution a { color: rgb(var(--color-primary)); }
+        #siteMap .leaflet-tooltip {
+            background: rgb(var(--color-surface) / 0.94);
+            border: 1px solid rgb(var(--color-primary));
+            color: rgb(var(--color-on-surface));
+            border-radius: 0.25rem;
+            box-shadow: none;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 11px;
         }
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 2px; background: rgb(var(--color-primary)); cursor: pointer; margin-top: -6px; }
@@ -120,13 +133,11 @@
 </select>
 </div>
 </div>
-<div class="relative flex-grow w-full bg-background overflow-hidden cursor-crosshair group">
-<div class="absolute inset-0 bg-cover bg-center opacity-40" style="background-image: linear-gradient(#1c1b1b, #1c1b1b)"></div>
-<div class="absolute inset-0" style="background-image: linear-gradient(rgb(var(--color-outline-variant)) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--color-outline-variant)) 1px, transparent 1px); background-size: 64px 64px; opacity: 0.1;"></div>
-<div class="absolute inset-0 heatmap-overlay mix-blend-color-dodge"></div>
-<div class="absolute right-4 bottom-4 flex flex-col gap-2">
-<button class="w-8 h-8 bg-surface/90 backdrop-blur border border-outline-variant rounded flex items-center justify-center hover:border-primary text-on-surface transition-colors"><span class="material-symbols-outlined text-sm">add</span></button>
-<button class="w-8 h-8 bg-surface/90 backdrop-blur border border-outline-variant rounded flex items-center justify-center hover:border-primary text-on-surface transition-colors"><span class="material-symbols-outlined text-sm">remove</span></button>
+<div class="relative flex-grow w-full bg-background overflow-hidden">
+<div aria-label="Interactive site map" class="absolute inset-0 z-0" id="siteMap" role="application"></div>
+<div class="absolute top-4 left-14 z-[500] pointer-events-none bg-surface/90 backdrop-blur border border-outline-variant px-3 py-2 max-w-[260px]">
+<div class="text-label-sm font-label-sm text-primary uppercase">Site selection</div>
+<div class="text-[10px] font-label-sm text-on-surface-variant mt-1">Click the map to update coordinates. The circle shows the 1.5 km analysis area.</div>
 </div>
 </div>
 <div class="h-10 border-t border-outline-variant bg-surface flex items-center justify-between px-4">
@@ -244,5 +255,6 @@ ThermalDrift + 12-hour operations + investment analysis
 </section>
 </main>
 <script src="../js/api.js"></script>
+<script src="../vendor/leaflet/leaflet.js"></script>
 <script src="../js/pages/site_setup.js"></script>
 </body></html>

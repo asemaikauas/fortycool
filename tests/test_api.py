@@ -38,6 +38,14 @@ def test_integrated_dashboard_is_served_by_the_api() -> None:
     assert 'request("/run-jobs"' in browser_client.text
     assert '"completed_with_warnings"' in browser_client.text
 
+    site_setup_script = client.get("/dashboard/js/pages/site_setup.js")
+    assert site_setup_script.status_code == 200
+    assert 'L.map("siteMap"' in site_setup_script.text
+    assert "tile.openstreetmap.org" in site_setup_script.text
+    assert 'siteMap.on("click"' in site_setup_script.text
+    assert 'id="siteMap"' in page.text
+    assert "vendor/leaflet/leaflet.js" in page.text
+
 
 def test_dashboard_request_contract_produces_all_mvp_outputs() -> None:
     payload = {

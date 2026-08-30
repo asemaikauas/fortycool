@@ -7,6 +7,11 @@
   const telemetrySource = el("telemetrySource");
   const telemetryFile = el("telemetryFile");
   let telemetryUpload = null;
+  let siteMap = null;
+  let siteMarker = null;
+  let analysisArea = null;
+
+  const ANALYSIS_RADIUS_METERS = 1500;
 
   function log(message, className = "") {
     const terminal = el("terminalLog");
@@ -21,6 +26,76 @@
     el("coordsLabel").textContent = `LAT: ${latInput.value || "—"} | LNG: ${lonInput.value || "—"}`;
   }
 
+  function inputCoordinates() {
+    const latitude = Number.parseFloat(latInput.value);
+    const longitude = Number.parseFloat(lonInput.value);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+    return [latitude, longitude];
+  }
+
+  function markerLabel() {
+    return locationInput.value.trim() || "Selected site";
+  }
+
+  function syncMapFromInputs({ recenter = false } = {}) {
+    const coordinates = inputCoordinates();
+    if (!siteMap || !coordinates) return;
+    siteMarker.setLatLng(coordinates);
+    siteMarker.unbindTooltip().bindTooltip(markerLabel(), {
+      direction: "top",
+      offset: [0, -10],
+    });
+    analysisArea.setLatLng(coordinates);
+    if (recenter) siteMap.flyTo(coordinates, Math.max(siteMap.getZoom(), 13));
+  }
+
+  function initializeSiteMap() {
+    const coordinates = inputCoordinates() || [39.01, -77.46];
+    if (!window.L) {
+      log("[WARN] Map library unavailable. Coordinates can still be entered manually.", "text-safety-warning");
+      return;
+    }
+
+    siteMap = L.map("siteMap", {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView(coordinates, 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(siteMap);
+    siteMap.attributionControl.setPrefix(false);
+
+    analysisArea = L.circle(coordinates, {
+      radius: ANALYSIS_RADIUS_METERS,
+      color: "#82d9ff",
+      weight: 2,
+      opacity: 0.9,
+      fillColor: "#36b8f4",
+      fillOpacity: 0.12,
+      interactive: false,
+    }).addTo(siteMap);
+    siteMarker = L.circleMarker(coordinates, {
+      radius: 8,
+      color: "#e9fbff",
+      weight: 3,
+      fillColor: "#00a9e8",
+      fillOpacity: 1,
+    }).addTo(siteMap);
+    syncMapFromInputs();
+
+    siteMap.on("click", (event) => {
+      latInput.value = event.latlng.lat.toFixed(6);
+      lonInput.value = event.latlng.lng.toFixed(6);
+      sampleSitePicker.value = "";
+      refreshCoordsLabel();
+      syncMapFromInputs();
+      log(`[MAP] Selected ${latInput.value}, ${lonInput.value}`, "text-status-observed");
+    });
+    window.requestAnimationFrame(() => siteMap.invalidateSize());
+  }
+
   function setSelectedSite(option) {
     if (!option?.dataset.lat) return;
     latInput.value = option.dataset.lat;
@@ -28,6 +103,7 @@
     locationInput.value = option.dataset.name || option.textContent.trim();
     locationInput.dataset.timezone = option.dataset.timezone || "America/New_York";
     refreshCoordsLabel();
+    syncMapFromInputs({ recenter: true });
   }
 
   async function loadProviderStatus() {
@@ -140,8 +216,15 @@
     };
   }
 
-  latInput.addEventListener("input", refreshCoordsLabel);
-  lonInput.addEventListener("input", refreshCoordsLabel);
+  latInput.addEventListener("input", () => {
+    refreshCoordsLabel();
+    syncMapFromInputs();
+  });
+  lonInput.addEventListener("input", () => {
+    refreshCoordsLabel();
+    syncMapFromInputs();
+  });
+  locationInput.addEventListener("input", () => syncMapFromInputs());
   sampleSitePicker.addEventListener("change", (event) => setSelectedSite(event.target.selectedOptions[0]));
   telemetrySource.addEventListener("change", () => {
     telemetryUpload = null;
@@ -214,6 +297,7 @@
 
   locationInput.dataset.timezone = "America/New_York";
   refreshCoordsLabel();
+  initializeSiteMap();
   toggleTelemetryPanel();
   loadProviderStatus();
   loadCatalog();
