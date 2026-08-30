@@ -1,0 +1,31 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "env": {
+    "FORTYCOOL_DB_PATH": "/tmp/fortycool/runs.sqlite3",
+    "FORTYCOOL_TRUSTED_PROXY_HOPS": "1",
+    "FORTYCOOL_THERMAL_PROVIDER": "fixture",
+    "FORTYCOOL_URBAN_PROVIDER": "fixture",
+    "FORTYCOOL_RATE_LIMIT_ANALYSIS": "10",
+    "FORTYCOOL_RATE_LIMIT_UPLOAD": "5",
+    "FORTYCOOL_GLOBAL_LIMIT_ANALYSIS": "40",
+    "FORTYCOOL_GLOBAL_LIMIT_UPLOAD": "20",
+    "FORTYCOOL_GLOBAL_LIMIT_COPILOT": "20"
+  },
+  "services": {
+    "fortycool": {
+      "root": ".",
+      "framework": "fastapi",
+      "entrypoint": "src/fortycool_agents/api.py",
+      "buildCommand": "python -m pip install --upgrade pip setuptools wheel\npython -m pip install .\n"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "type": "service",
+        "service": "fortycool"
+      }
+    }
+  ]
+}

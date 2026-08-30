@@ -30,6 +30,12 @@ dev = ["pytest>=9.0.3,<10", "pip-audit>=2.7,<3"]
 [project.scripts]
 fortycool = "fortycool_agents.cli:main"
 
+[tool.vercel]
+# Vercel's FastAPI runtime imports this ASGI application directly. Keeping the
+# entry point here avoids a second wrapper module that could drift from the
+# local and container launch commands.
+entrypoint = "fortycool_agents.api:app"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

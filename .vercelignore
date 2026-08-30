@@ -1,0 +1,13 @@
+.env
+.venv/
+.git/
+.github/
+.pytest_cache/
+.ruff_cache/
+.fortycool-cache/
+.fortycool-data/
+tests/
+output/
+tmp/
+Dockerfile
+render.yaml

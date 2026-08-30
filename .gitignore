@@ -21,3 +21,4 @@ tmp/
 *credentials*.json
 service-account*.json
 gcloud-*.json
+.vercel
