@@ -16,6 +16,7 @@ from fastapi import (
     status,
 )
 from fastapi.concurrency import run_in_threadpool
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -68,6 +69,11 @@ _DOCS_ENABLED = os.getenv("FORTYCOOL_ENABLE_DOCS", "").strip().lower() in {
     "yes",
     "on",
 }
+_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("FORTYCOOL_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 app = FastAPI(
     title="FortyCool Agent Service",
@@ -81,6 +87,17 @@ app = FastAPI(
 # the size limiter short-circuits.
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
+if _CORS_ORIGINS:
+    # CORS is deliberately opt-in. The public demo uses ``*`` without browser
+    # credentials; production operators can instead provide a comma-separated
+    # allowlist of exact frontend origins.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_CORS_ORIGINS,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
 
 @app.exception_handler(ValueError)

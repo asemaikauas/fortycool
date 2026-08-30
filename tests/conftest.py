@@ -19,3 +19,4 @@ if _TEST_DB.exists():
     _TEST_DB.unlink()
 os.environ.setdefault("FORTYCOOL_DB_PATH", str(_TEST_DB))
 os.environ["FORTYCOOL_DB_PATH"] = str(_TEST_DB)
+os.environ["FORTYCOOL_CORS_ORIGINS"] = "https://frontend.example"

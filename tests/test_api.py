@@ -8,6 +8,22 @@ from fortycool_agents.models import CopilotResponse
 client = TestClient(app)
 
 
+def test_browser_frontend_cors_preflight_is_accepted() -> None:
+    response = client.options(
+        "/runs",
+        headers={
+            "Origin": "https://frontend.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,x-api-key",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://frontend.example"
+    assert "POST" in response.headers["access-control-allow-methods"]
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+
+
 def test_integrated_dashboard_is_served_by_the_api() -> None:
     redirect = client.get("/", follow_redirects=False)
     page = client.get("/dashboard/pages/site_setup.html")

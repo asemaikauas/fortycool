@@ -208,6 +208,7 @@ on. Authentication is opt-in so a local checkout still runs keyless:
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `FORTYCOOL_API_KEY` | unset | When set, every route requires a matching `X-API-Key` header |
+| `FORTYCOOL_CORS_ORIGINS` | unset | Comma-separated browser origins allowed to call the API; use `*` only for a public API without browser credentials |
 | `FORTYCOOL_RATE_LIMIT_ANALYSIS` | 20 | Analysis requests per window, per caller |
 | `FORTYCOOL_RATE_LIMIT_COPILOT` | 10 | Copilot requests per window, per caller |
 | `FORTYCOOL_RATE_LIMIT_UPLOAD` | 10 | Telemetry writes per window, per caller |
