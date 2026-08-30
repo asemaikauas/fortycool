@@ -45,6 +45,10 @@ def test_integrated_dashboard_is_served_by_the_api() -> None:
     assert 'siteMap.on("click"' in site_setup_script.text
     assert 'id="siteMap"' in page.text
     assert "vendor/leaflet/leaflet.js" in page.text
+    assert 'id="setupNotice"' in page.text
+    assert "System Status Console" not in page.text
+    assert 'id="terminalLog"' not in page.text
+    assert 'el("terminalLog")' not in site_setup_script.text
 
     command_center = client.get("/dashboard/pages/command_center.html")
     assert command_center.status_code == 200

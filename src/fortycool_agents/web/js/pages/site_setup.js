@@ -13,13 +13,16 @@
 
   const ANALYSIS_RADIUS_METERS = 1500;
 
-  function log(message, className = "") {
-    const terminal = el("terminalLog");
-    const line = document.createElement("div");
-    line.className = className;
-    line.textContent = message;
-    terminal.insertBefore(line, terminal.lastElementChild);
-    terminal.scrollTop = terminal.scrollHeight;
+  function showNotice(message) {
+    const notice = el("setupNotice");
+    notice.textContent = message;
+    notice.classList.remove("hidden");
+  }
+
+  function clearNotice() {
+    const notice = el("setupNotice");
+    notice.textContent = "";
+    notice.classList.add("hidden");
   }
 
   function refreshCoordsLabel() {
@@ -53,7 +56,7 @@
   function initializeSiteMap() {
     const coordinates = inputCoordinates() || [39.01, -77.46];
     if (!window.L) {
-      log("[WARN] Map library unavailable. Coordinates can still be entered manually.", "text-safety-warning");
+      showNotice("The map could not load. You can still enter coordinates manually.");
       return;
     }
 
@@ -91,7 +94,6 @@
       sampleSitePicker.value = "";
       refreshCoordsLabel();
       syncMapFromInputs();
-      log(`[MAP] Selected ${latInput.value}, ${lonInput.value}`, "text-status-observed");
     });
     window.requestAnimationFrame(() => siteMap.invalidateSize());
   }
@@ -110,10 +112,8 @@
     try {
       const health = await FortyCoolAPI.health();
       el("syncLabel").innerHTML = `<span class="material-symbols-outlined text-[14px]">satellite_alt</span> ${FortyCoolAPI.escapeHTML(health.thermal_provider)} + ${FortyCoolAPI.escapeHTML(health.urban_provider)}`;
-      log(`[SYS] Providers: ${health.thermal_provider} / ${health.urban_provider}`, "text-status-observed");
-      log(`[SYS] Copilot: ${health.copilot} (${health.copilot_model})`);
       if (health.provider_error) {
-        log(`[WARN] Provider configuration failed: ${health.provider_error}`, "text-safety-warning");
+        showNotice("Live-data providers are unavailable. Check the backend configuration before running an analysis.");
       }
       // Say it on the screen, before anyone runs anything. In fixture mode the
       // annual series is a fixed synthetic trend that never reads the entered
@@ -121,14 +121,10 @@
       if (String(health.thermal_provider).startsWith("Fixture")) {
         const banner = el("fixtureModeBanner");
         if (banner) banner.classList.remove("hidden");
-        log(
-          "[SYS] Fixture mode: thermal history is a fixed demo series and does not depend on the coordinates you enter.",
-          "text-status-simulated"
-        );
       }
     } catch (error) {
       el("syncLabel").textContent = "Backend unavailable";
-      log(`[ERR] ${error.message}`, "text-safety-critical");
+      showNotice(`The backend is unavailable: ${error.message}`);
     }
   }
 
@@ -146,7 +142,7 @@
         sampleSitePicker.appendChild(option);
       });
     } catch (error) {
-      log(`[WARN] Public site catalog unavailable: ${error.message}`, "text-safety-warning");
+      showNotice(`The sample-site catalog could not load: ${error.message}`);
     }
   }
 
@@ -165,7 +161,6 @@
     el("telemetryUploadStatus").textContent = "Validating and uploading…";
     telemetryUpload = await FortyCoolAPI.uploadTelemetry(telemetryFile.files[0]);
     el("telemetryUploadStatus").textContent = `${telemetryUpload.rows} rows accepted · ${telemetryUpload.median_interval_minutes} min median interval`;
-    log(`[SYS] Uploaded BMS telemetry ${telemetryUpload.upload_id}`, "text-status-observed");
     return telemetryUpload;
   }
 
@@ -240,6 +235,7 @@
 
   el("loadDemoBtn").addEventListener("click", async () => {
     const button = el("loadDemoBtn");
+    clearNotice();
     button.disabled = true;
     button.textContent = "VERIFYING SAVED RUN…";
     try {
@@ -249,7 +245,6 @@
         site_name: "Verified ThermalDrift Evidence Demo",
         telemetry_source: demo.operations_data_class || "not_available",
       });
-      log(`[SYS] Verified saved run ${runId}: FortyGuard ${demo.thermal_years[0]}-${demo.thermal_years.at(-1)} + Dynamic World`, "text-status-observed");
       // No `verified` flag in the URL. The command centre asks the server
       // whether this specific run passed the gates.
       window.location.href = `command_center.html?run_id=${encodeURIComponent(runId)}`;
@@ -259,11 +254,10 @@
       // database, so a clean clone always answers 404 here. Say that plainly
       // instead of printing a raw HTTP error.
       const missing = /returned 404/.test(error.message);
-      log(
+      showNotice(
         missing
-          ? "[SYS] No verified run is stored on this deployment. A verified run is created by a live analysis with FortyGuard and Earth Engine credentials; the local database that holds it is not committed to the repository."
-          : `[ERR] ${error.message}`,
-        missing ? "text-safety-warning" : "text-safety-critical"
+          ? "No verified run is stored on this deployment. Run a new live analysis to create one."
+          : `The verified demo could not load: ${error.message}`
       );
       button.disabled = false;
       button.innerHTML = '<span class="material-symbols-outlined text-[17px]">verified</span> LOAD VERIFIED THERMALDRIFT DEMO';
@@ -272,12 +266,12 @@
 
   el("analyzeBtn").addEventListener("click", async () => {
     const button = el("analyzeBtn");
+    clearNotice();
     button.disabled = true;
     button.textContent = "STARTING AGENTS…";
     try {
       const upload = await ensureTelemetryUpload();
       const request = buildRequest(upload);
-      log(`[SYS] Starting complete analysis for ${request.site.name}…`, "text-status-observed");
       const job = await FortyCoolAPI.startRun(request);
       if (!job.run_id) throw new Error("The backend accepted the request without returning a run ID.");
       FortyCoolAPI.recordRunLocally(job.run_id, {
@@ -286,10 +280,9 @@
         longitude: request.site.longitude,
         telemetry_source: request.telemetry.source,
       });
-      log(`[SYS] Run ${job.run_id} queued. Opening agent trace…`, "text-status-observed");
       window.location.href = `command_center.html?run_id=${encodeURIComponent(job.run_id)}`;
     } catch (error) {
-      log(`[ERR] ${error.message}`, "text-safety-critical");
+      showNotice(error.message);
       button.disabled = false;
       button.textContent = "ANALYZE SITE";
     }
