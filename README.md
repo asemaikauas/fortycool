@@ -296,10 +296,11 @@ heroku ps:scale web=1 -a fortycool
 heroku open -a fortycool
 ```
 
-Use the app's actual `web_url` as `FORTYCOOL_PUBLIC_API_BASE` on Vercel. Every dashboard page loads
-`/dashboard/api-config.js` before the browser API client, so Vercel can send requests to Heroku while
-the dashboard remains on `fortycool.vercel.app`. The Heroku CORS allowlist above permits exactly that
-frontend origin.
+Vercel publishes only `src/fortycool_agents/web`; it no longer packages a second ephemeral copy of
+the Python backend. The static `api-config.js` contains the app's actual Heroku `web_url`, and every
+dashboard page loads it before the browser API client. The dashboard therefore remains on
+`fortycool.vercel.app` while its requests go to Heroku. The Heroku CORS allowlist above permits
+exactly that frontend origin.
 
 A Basic dyno is always on, but Heroku still cycles dynos at least daily and on every deploy or config
 change. Completed runs and uploads survive because they are in Postgres; an analysis executing at
