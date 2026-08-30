@@ -46,6 +46,11 @@ def test_integrated_dashboard_is_served_by_the_api() -> None:
     assert 'id="siteMap"' in page.text
     assert "vendor/leaflet/leaflet.js" in page.text
 
+    command_center = client.get("/dashboard/pages/command_center.html")
+    assert command_center.status_code == 200
+    assert ">Copilot</span>" in command_center.text
+    assert "GPT-4o Copilot" not in command_center.text
+
 
 def test_dashboard_api_config_can_point_vercel_at_backend(monkeypatch) -> None:
     monkeypatch.setenv(
