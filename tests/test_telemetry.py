@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 
 from fortycool_agents.api import app
+from fortycool_agents.database import Database
+from fortycool_agents.telemetry import TelemetryStore
 
 
 client = TestClient(app)
@@ -140,3 +142,17 @@ def test_agent_contract_schemas_are_exposed() -> None:
     assert response_schema.status_code == 200
     assert "site" in request_schema.json()["properties"]
     assert "evidence" in response_schema.json()["properties"]
+
+
+def test_upload_survives_store_restart(tmp_path) -> None:
+    path = tmp_path / "telemetry.sqlite3"
+    first = TelemetryStore(database=Database(path))
+    upload = first.ingest_csv(telemetry_csv())
+
+    reopened = TelemetryStore(database=Database(path))
+    restored_metadata = reopened.metadata(upload.upload_id)
+    restored_frame = reopened.get(upload.upload_id)
+
+    assert restored_metadata == upload
+    assert len(restored_frame) == upload.rows
+    assert str(restored_frame["timestamp"].dt.tz) == "UTC"

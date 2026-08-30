@@ -3,7 +3,8 @@
 Usage:
     python -m pip install --dry-run --ignore-installed \
         --report report.json \
-        earthengine-api fastapi httpx numpy pandas pydantic reportlab uvicorn pytest
+        earthengine-api fastapi httpx numpy pandas psycopg[binary] pydantic \
+        reportlab uvicorn pytest pip-audit
     python scripts/write_lock.py report.json > requirements.lock
 
 Install the result with ``pip install --require-hashes -r requirements.lock`` so

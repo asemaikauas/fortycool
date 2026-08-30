@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import os
 import time
-from collections import OrderedDict
 from io import StringIO
 from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 
+from .database import Database
 from .models import TelemetryUpload
 
 
@@ -58,48 +58,52 @@ class TelemetryValidationError(ValueError):
     pass
 
 
-# Uploads are held in process memory. Without a bound, one 8.8 MB CSV retains
-# roughly 19 MB forever and nobody ever calls DELETE, so the ceiling and the
-# expiry below are what keep the service from growing until it is killed.
+# Retention bounds protect both the local file and the production Postgres
+# database from anonymous uploads growing without limit.
 MAX_RETAINED_UPLOADS = int(os.getenv("FORTYCOOL_MAX_UPLOADS", 32))
 UPLOAD_TTL_SECONDS = float(os.getenv("FORTYCOOL_UPLOAD_TTL_SECONDS", 3600))
 
 
 class TelemetryStore:
-    """Validated in-memory telemetry store for the hackathon service.
-
-    The store intentionally retains only normalized numeric columns. A durable
-    object-store adapter can replace it later without changing the request model.
-
-    Entries expire. The error message already promised expiry ("not found or
-    expired") long before anything implemented it.
-    """
+    """Validated telemetry persisted in Postgres or the local SQLite fallback."""
 
     def __init__(
         self,
         *,
+        database: Database | None = None,
         max_uploads: int = MAX_RETAINED_UPLOADS,
         ttl_seconds: float = UPLOAD_TTL_SECONDS,
     ) -> None:
-        self._frames: "OrderedDict[str, pd.DataFrame]" = OrderedDict()
-        self._metadata: dict[str, TelemetryUpload] = {}
-        self._stored_at: dict[str, float] = {}
+        self.database = database or Database()
         self.max_uploads = max_uploads
         self.ttl_seconds = ttl_seconds
 
     def _evict(self) -> None:
-        now = time.monotonic()
-        for upload_id, stored_at in list(self._stored_at.items()):
-            if now - stored_at > self.ttl_seconds:
-                self._forget(upload_id)
-        while len(self._frames) > self.max_uploads:
-            oldest = next(iter(self._frames))
-            self._forget(oldest)
+        cutoff = time.time() - self.ttl_seconds
+        with self.database.session() as session:
+            session.execute(
+                "DELETE FROM telemetry_uploads WHERE created_at_epoch < ?", (cutoff,)
+            )
+            row = session.execute("SELECT COUNT(*) FROM telemetry_uploads").fetchone()
+            excess = max(0, int(row[0]) - self.max_uploads)
+            if excess:
+                session.execute(
+                    """
+                    DELETE FROM telemetry_uploads
+                    WHERE upload_id IN (
+                        SELECT upload_id FROM telemetry_uploads
+                        ORDER BY accessed_at_epoch ASC, upload_id ASC
+                        LIMIT ?
+                    )
+                    """,
+                    (excess,),
+                )
 
     def _forget(self, upload_id: str) -> None:
-        self._frames.pop(upload_id, None)
-        self._metadata.pop(upload_id, None)
-        self._stored_at.pop(upload_id, None)
+        with self.database.session() as session:
+            session.execute(
+                "DELETE FROM telemetry_uploads WHERE upload_id = ?", (upload_id,)
+            )
 
     def ingest_csv(self, raw: bytes) -> TelemetryUpload:
         if not raw:
@@ -203,26 +207,64 @@ class TelemetryStore:
             columns=list(frame.columns),
             warnings=warnings,
         )
-        self._frames[upload_id] = frame
-        self._metadata[upload_id] = result
-        self._stored_at[upload_id] = time.monotonic()
+        stored_at = time.time()
+        frame_json = frame.to_json(
+            orient="split", date_format="iso", date_unit="us", double_precision=15
+        )
+        with self.database.session() as session:
+            session.execute(
+                """
+                INSERT INTO telemetry_uploads (
+                    upload_id, created_at_epoch, accessed_at_epoch,
+                    metadata_json, frame_json
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    upload_id,
+                    stored_at,
+                    stored_at,
+                    result.model_dump_json(),
+                    frame_json,
+                ),
+            )
         self._evict()
         return result
 
     def get(self, upload_id: str) -> pd.DataFrame:
         self._evict()
-        if upload_id not in self._frames:
+        with self.database.session() as session:
+            row = session.execute(
+                "SELECT frame_json FROM telemetry_uploads WHERE upload_id = ?",
+                (upload_id,),
+            ).fetchone()
+            if row is not None:
+                session.execute(
+                    """
+                    UPDATE telemetry_uploads SET accessed_at_epoch = ?
+                    WHERE upload_id = ?
+                    """,
+                    (time.time(), upload_id),
+                )
+        if row is None:
             raise KeyError(upload_id)
-        self._frames.move_to_end(upload_id)
-        return self._frames[upload_id].copy(deep=True)
+        frame = pd.read_json(StringIO(row[0]), orient="split")
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+        return frame
 
     def metadata(self, upload_id: str) -> TelemetryUpload:
         self._evict()
-        if upload_id not in self._metadata:
+        with self.database.session() as session:
+            row = session.execute(
+                "SELECT metadata_json FROM telemetry_uploads WHERE upload_id = ?",
+                (upload_id,),
+            ).fetchone()
+        if row is None:
             raise KeyError(upload_id)
-        return self._metadata[upload_id]
+        return TelemetryUpload.model_validate_json(row[0])
 
     def delete(self, upload_id: str) -> bool:
-        existed = upload_id in self._frames
-        self._forget(upload_id)
-        return existed
+        with self.database.session() as session:
+            cursor = session.execute(
+                "DELETE FROM telemetry_uploads WHERE upload_id = ?", (upload_id,)
+            )
+            return cursor.rowcount > 0

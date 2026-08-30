@@ -35,6 +35,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request,os,sys; sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",8000)}/health', timeout=4).status==200 else 1)"
 
 # 0.0.0.0, not 127.0.0.1: binding loopback inside a container makes the service
-# unreachable from outside it. One worker, because the telemetry and job stores
-# are per-process.
+# unreachable from outside it. One worker fits the memory and connection budget
+# of the smallest deployment; shared state lives in the configured database.
 CMD ["sh", "-c", "exec python -m uvicorn fortycool_agents.api:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

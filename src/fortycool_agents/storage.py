@@ -1,84 +1,62 @@
 from __future__ import annotations
 
 import os
-import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
 
+from .database import Database
 from .models import AnalysisResponse
 
-# Each saved run is roughly 34 KB of JSON, and nothing pruned the table, so the
-# database grew without limit while `/demo/verified-run` parsed up to 500 of
-# those blobs on every call.
+# Each saved run is roughly 34 KB of JSON. Bound retention on both the local
+# SQLite fallback and the Heroku Postgres database.
 MAX_RETAINED_RUNS = int(os.getenv("FORTYCOOL_MAX_RETAINED_RUNS", 2_000))
 
 
 class RunRepository:
-    """Small SQLite result repository suitable for a single hackathon service."""
+    """Durable analysis results backed by Postgres or local SQLite."""
 
     def __init__(
-        self, path: str | Path | None = None, *, max_rows: int = MAX_RETAINED_RUNS
+        self,
+        path: str | Path | None = None,
+        *,
+        database: Database | None = None,
+        max_rows: int = MAX_RETAINED_RUNS,
     ) -> None:
-        configured = path or os.getenv("FORTYCOOL_DB_PATH", ".fortycool-data/runs.sqlite3")
-        self.path = str(configured)
-        if self.path != ":memory:":
-            Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        # Write-ahead logging plus a busy timeout so a second process reading or
-        # writing the same file waits instead of raising "database is locked"
-        # straight through to the client as a 500.
-        if self.path != ":memory:":
-            self._connection.execute("PRAGMA journal_mode=WAL")
-        self._connection.execute("PRAGMA busy_timeout=5000")
-        self._connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS analysis_runs (
-                run_id TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                response_json TEXT NOT NULL
-            )
-            """
-        )
-        # `rowid` is implicit and cannot be indexed, but ordering by created_at
-        # is the scan that `list_recent` and the retention sweep both perform.
-        self._connection.execute(
-            "CREATE INDEX IF NOT EXISTS analysis_runs_created_at "
-            "ON analysis_runs (created_at DESC)"
-        )
-        self._connection.commit()
-        self._lock = Lock()
+        if path is not None and database is not None:
+            raise ValueError("pass either path or database, not both")
+        self.database = database or Database(path)
+        self.path = self.database.path
         self.max_rows = max_rows
 
     def save(self, response: AnalysisResponse) -> None:
         payload = response.model_dump_json()
-        with self._lock:
-            self._connection.execute(
+        saved_at = datetime.now(timezone.utc).isoformat()
+        with self.database.session() as session:
+            session.execute(
                 """
-                INSERT INTO analysis_runs (run_id, response_json)
-                VALUES (?, ?)
+                INSERT INTO analysis_runs (run_id, created_at, response_json)
+                VALUES (?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     response_json = excluded.response_json,
-                    created_at = CURRENT_TIMESTAMP
+                    created_at = excluded.created_at
                 """,
-                (response.run_id, payload),
+                (response.run_id, saved_at, payload),
             )
-            # Retention, so the file cannot grow without bound.
-            self._connection.execute(
+            session.execute(
                 """
                 DELETE FROM analysis_runs
-                WHERE rowid NOT IN (
-                    SELECT rowid FROM analysis_runs
-                    ORDER BY created_at DESC, rowid DESC
+                WHERE run_id NOT IN (
+                    SELECT run_id FROM analysis_runs
+                    ORDER BY created_at DESC, run_id DESC
                     LIMIT ?
                 )
                 """,
                 (self.max_rows,),
             )
-            self._connection.commit()
 
     def get(self, run_id: str) -> AnalysisResponse | None:
-        with self._lock:
-            row = self._connection.execute(
+        with self.database.session() as session:
+            row = session.execute(
                 "SELECT response_json FROM analysis_runs WHERE run_id = ?", (run_id,)
             ).fetchone()
         if row is None:
@@ -87,17 +65,17 @@ class RunRepository:
 
     def list_recent(self, *, limit: int = 100) -> list[tuple[str, AnalysisResponse]]:
         bounded_limit = max(1, min(limit, 500))
-        with self._lock:
-            rows = self._connection.execute(
+        with self.database.session() as session:
+            rows = session.execute(
                 """
                 SELECT created_at, response_json
                 FROM analysis_runs
-                ORDER BY created_at DESC, rowid DESC
+                ORDER BY created_at DESC, run_id DESC
                 LIMIT ?
                 """,
                 (bounded_limit,),
             ).fetchall()
         return [
-            (created_at, AnalysisResponse.model_validate_json(payload))
+            (str(created_at), AnalysisResponse.model_validate_json(payload))
             for created_at, payload in rows
         ]

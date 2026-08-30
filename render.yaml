@@ -5,10 +5,8 @@
 #
 #   * --host 0.0.0.0. Binding 127.0.0.1 works locally and makes the container
 #     unreachable, which presents as a health check that never passes.
-#   * --workers 1. `telemetry_store` and `job_manager` are per-process, so with
-#     two workers an upload can land on one and its run on another, and the
-#     analysis then proceeds silently on simulated data instead of the
-#     customer's telemetry. That is a wrong answer, not an error.
+#   * --workers 1. The free instance is memory constrained, and one worker also
+#     keeps database connection usage predictable.
 #   * FORTYCOOL_TRUSTED_PROXY_HOPS=1. Render terminates TLS at its own proxy, so
 #     without this every visitor shares one rate-limit bucket and a single
 #     abuser locks out the whole demo.

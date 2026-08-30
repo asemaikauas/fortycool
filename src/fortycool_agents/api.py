@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import json
 import logging
 import os
 from uuid import uuid4
@@ -27,6 +28,7 @@ from .copilot import (
     CopilotUnavailableError,
     FortyCoolCopilot,
 )
+from .database import Database
 from .demo import latest_verified_demo, verified_manifest_for
 from .discovery import SiteDiscoveryAgent
 from .discovery_catalog import public_catalog
@@ -136,7 +138,8 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
             "correlation_id": correlation_id,
         },
     )
-telemetry_store = TelemetryStore()
+database = Database()
+telemetry_store = TelemetryStore(database=database)
 
 # Provider construction reads environment variables and, for Earth Engine, opens
 # an authenticated session. Any of that failing used to raise during module
@@ -157,7 +160,7 @@ except Exception as exc:  # configuration faults must not kill the process
         telemetry_store=telemetry_store,
     )
 
-run_repository = RunRepository()
+run_repository = RunRepository(database=database)
 job_manager = RunJobManager(orchestrator, run_repository)
 copilot_service = FortyCoolCopilot()
 discovery_agent = SiteDiscoveryAgent(
@@ -179,6 +182,18 @@ async def dashboard_redirect() -> RedirectResponse:
     return RedirectResponse(url="/dashboard/pages/site_setup.html")
 
 
+@app.get("/dashboard/api-config.js", include_in_schema=False)
+async def dashboard_api_config() -> Response:
+    """Inject the backend origin when Vercel serves only the dashboard."""
+
+    api_base = os.getenv("FORTYCOOL_PUBLIC_API_BASE", "").rstrip("/")
+    return Response(
+        content=f"window.FORTYCOOL_API_BASE = {json.dumps(api_base)};\n",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {
@@ -189,6 +204,7 @@ async def health() -> dict[str, str]:
         "copilot": "configured" if copilot_service.configured else "not_configured",
         "copilot_model": copilot_service.model,
         "authentication": "required" if api_key_required() else "open",
+        "database": database.backend,
     }
 
 

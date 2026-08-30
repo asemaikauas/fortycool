@@ -2,47 +2,29 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
-from collections import OrderedDict
-from dataclasses import dataclass, field
 from uuid import uuid4
 
-import logging
-
-from .models import AnalysisRequest, AnalysisResponse, JobState, RunJobStatus, TraceEvent
+from .models import AnalysisRequest, JobState, RunJobStatus, TraceEvent
 from .orchestrator import FortyCoolOrchestrator
 from .storage import RunRepository
 
 logger = logging.getLogger(__name__)
 
 
-# Each finished job holds a full analysis response, including charts, a GeoJSON
-# heatmap, and the whole trace. Nothing ever evicted them, so the dictionary was
-# an unbounded, attacker-fillable allocation reachable from an endpoint that
-# returns in about a millisecond.
 MAX_RETAINED_JOBS = int(os.getenv("FORTYCOOL_MAX_JOBS", 256))
 JOB_TTL_SECONDS = float(os.getenv("FORTYCOOL_JOB_TTL_SECONDS", 3600))
-# Ceiling on how long one SSE stream may stay open, and on how long a job may
-# sit queued before a stream gives up on it. The loop's only exit was a terminal
-# state, so a job that never started streamed keep-alives forever.
 STREAM_MAX_SECONDS = float(os.getenv("FORTYCOOL_STREAM_MAX_SECONDS", 900))
 STREAM_QUEUED_TIMEOUT_SECONDS = float(
     os.getenv("FORTYCOOL_STREAM_QUEUED_TIMEOUT_SECONDS", 60)
 )
 
 
-@dataclass
-class JobRecord:
-    run_id: str
-    state: JobState = JobState.QUEUED
-    events: list[TraceEvent] = field(default_factory=list)
-    response: AnalysisResponse | None = None
-    error: str | None = None
-    created_at: float = field(default_factory=time.monotonic)
-
-
 class RunJobManager:
+    """Durable job status and trace storage shared through the main database."""
+
     def __init__(
         self,
         orchestrator: FortyCoolOrchestrator,
@@ -53,88 +35,185 @@ class RunJobManager:
     ) -> None:
         self.orchestrator = orchestrator
         self.repository = repository
-        self._jobs: "OrderedDict[str, JobRecord]" = OrderedDict()
+        self.database = repository.database
         self.max_jobs = max_jobs
         self.ttl_seconds = ttl_seconds
+        # A Heroku restart cannot resume a FastAPI BackgroundTask. Expose that
+        # explicitly instead of leaving a job in "running" forever.
+        self._recover_interrupted_jobs()
+
+    def _recover_interrupted_jobs(self) -> None:
+        now = time.time()
+        with self.database.session() as session:
+            session.execute(
+                """
+                UPDATE run_jobs
+                SET state = ?, error = ?, updated_at_epoch = ?
+                WHERE state IN (?, ?)
+                """,
+                (
+                    JobState.FAILED.value,
+                    "the analysis was interrupted by a service restart; submit a new run",
+                    now,
+                    JobState.QUEUED.value,
+                    JobState.RUNNING.value,
+                ),
+            )
 
     def _evict(self) -> None:
-        now = time.monotonic()
-        for run_id, record in list(self._jobs.items()):
-            finished = record.state in {JobState.COMPLETED, JobState.FAILED}
-            if finished and now - record.created_at > self.ttl_seconds:
-                self._jobs.pop(run_id, None)
-        while len(self._jobs) > self.max_jobs:
-            for run_id, record in list(self._jobs.items()):
-                if record.state in {JobState.COMPLETED, JobState.FAILED}:
-                    self._jobs.pop(run_id, None)
-                    break
-            else:
-                # Everything still in flight; do not drop a running job.
-                break
+        cutoff = time.time() - self.ttl_seconds
+        terminal = (JobState.COMPLETED.value, JobState.FAILED.value)
+        with self.database.session() as session:
+            session.execute(
+                """
+                DELETE FROM run_jobs
+                WHERE state IN (?, ?) AND created_at_epoch < ?
+                """,
+                (*terminal, cutoff),
+            )
+            count_row = session.execute("SELECT COUNT(*) FROM run_jobs").fetchone()
+            excess = max(0, int(count_row[0]) - self.max_jobs)
+            if excess:
+                session.execute(
+                    """
+                    DELETE FROM run_jobs
+                    WHERE run_id IN (
+                        SELECT run_id FROM run_jobs
+                        WHERE state IN (?, ?)
+                        ORDER BY created_at_epoch ASC, run_id ASC
+                        LIMIT ?
+                    )
+                    """,
+                    (*terminal, excess),
+                )
 
     def create(self) -> RunJobStatus:
-        run_id = uuid4().hex
         self._evict()
-        self._jobs[run_id] = JobRecord(run_id=run_id)
+        run_id = uuid4().hex
+        now = time.time()
+        with self.database.session() as session:
+            session.execute(
+                """
+                INSERT INTO run_jobs (
+                    run_id, state, error, created_at_epoch, updated_at_epoch
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (run_id, JobState.QUEUED.value, None, now, now),
+            )
         return self.snapshot(run_id)
 
+    def _set_state(
+        self, run_id: str, state: JobState, *, error: str | None = None
+    ) -> bool:
+        with self.database.session() as session:
+            cursor = session.execute(
+                """
+                UPDATE run_jobs
+                SET state = ?, error = ?, updated_at_epoch = ?
+                WHERE run_id = ?
+                """,
+                (state.value, error, time.time(), run_id),
+            )
+            return cursor.rowcount > 0
+
+    def _append_event(self, run_id: str, event: TraceEvent) -> None:
+        payload = event.model_dump_json()
+        with self.database.session() as session:
+            row = session.execute(
+                """
+                SELECT COALESCE(MAX(sequence), -1) + 1
+                FROM run_job_events
+                WHERE run_id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+            session.execute(
+                """
+                INSERT INTO run_job_events (run_id, sequence, event_json)
+                VALUES (?, ?, ?)
+                """,
+                (run_id, int(row[0]), payload),
+            )
+
     async def execute(self, run_id: str, request: AnalysisRequest) -> None:
-        record = self._jobs.get(run_id)
-        if record is None:
-            # The job was evicted before the background task started. Nothing to
-            # report to, and re-creating it would resurrect a dead run id.
+        if not self._set_state(run_id, JobState.RUNNING):
             return
-        record.state = JobState.RUNNING
         try:
             response = await self.orchestrator.run(
                 request,
                 run_id=run_id,
-                event_sink=record.events.append,
+                event_sink=lambda event: self._append_event(run_id, event),
             )
-            record.response = response
-            record.state = JobState.COMPLETED
             self.repository.save(response)
+            self._set_state(run_id, JobState.COMPLETED)
         except Exception as exc:  # job boundary must preserve failure state for clients
-            record.state = JobState.FAILED
-            # The client gets a stable, non-revealing message; the detail stays
-            # in the server log. The old text handed back pydantic field paths,
-            # offending values, and a documentation URL.
-            record.error = "the analysis could not be completed"
+            self._set_state(
+                run_id,
+                JobState.FAILED,
+                error="the analysis could not be completed",
+            )
             logger.exception("run job %s failed", run_id, exc_info=exc)
 
     def snapshot(self, run_id: str) -> RunJobStatus:
-        if run_id not in self._jobs:
+        with self.database.session() as session:
+            row = session.execute(
+                """
+                SELECT state, error,
+                    (SELECT COUNT(*) FROM run_job_events WHERE run_id = ?)
+                FROM run_jobs
+                WHERE run_id = ?
+                """,
+                (run_id, run_id),
+            ).fetchone()
+        if row is None:
             raise KeyError(run_id)
-        record = self._jobs[run_id]
+        state = JobState(row[0])
+        response = (
+            self.repository.get(run_id) if state == JobState.COMPLETED else None
+        )
         return RunJobStatus(
-            run_id=record.run_id,
-            state=record.state,
-            event_count=len(record.events),
-            error=record.error,
-            response=record.response,
+            run_id=run_id,
+            state=state,
+            event_count=int(row[2]),
+            error=row[1],
+            response=response,
         )
 
+    def _events_since(self, run_id: str, cursor: int) -> list[TraceEvent]:
+        with self.database.session() as session:
+            rows = session.execute(
+                """
+                SELECT event_json FROM run_job_events
+                WHERE run_id = ? AND sequence >= ?
+                ORDER BY sequence ASC
+                """,
+                (run_id, cursor),
+            ).fetchall()
+        return [TraceEvent.model_validate_json(row[0]) for row in rows]
+
     async def stream(self, run_id: str):
-        if run_id not in self._jobs:
-            raise KeyError(run_id)
+        self.snapshot(run_id)
         cursor = 0
         started = time.monotonic()
         while True:
-            record = self._jobs.get(run_id)
-            if record is None:
+            try:
+                record = self.snapshot(run_id)
+            except KeyError:
                 yield (
                     'event: terminal\ndata: {"run_id":"%s","state":"failed",'
                     '"error":"the run record expired"}\n\n' % run_id
                 )
                 return
-            while cursor < len(record.events):
-                event = record.events[cursor]
+            events = self._events_since(run_id, cursor)
+            for event in events:
                 cursor += 1
-                payload = json.dumps(event.model_dump(mode="json"), separators=(",", ":"))
+                payload = json.dumps(
+                    event.model_dump(mode="json"), separators=(",", ":")
+                )
                 yield f"event: trace\ndata: {payload}\n\n"
             if record.state in {JobState.COMPLETED, JobState.FAILED}:
                 payload = json.dumps(
-                    self.snapshot(run_id).model_dump(mode="json", exclude={"response"}),
+                    record.model_dump(mode="json", exclude={"response"}),
                     separators=(",", ":"),
                 )
                 yield f"event: terminal\ndata: {payload}\n\n"

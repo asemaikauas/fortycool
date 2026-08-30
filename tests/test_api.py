@@ -47,6 +47,21 @@ def test_integrated_dashboard_is_served_by_the_api() -> None:
     assert "vendor/leaflet/leaflet.js" in page.text
 
 
+def test_dashboard_api_config_can_point_vercel_at_backend(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "FORTYCOOL_PUBLIC_API_BASE", "https://fortycool.example.herokuapp.com/"
+    )
+
+    response = client.get("/dashboard/api-config.js")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert (
+        response.text
+        == 'window.FORTYCOOL_API_BASE = "https://fortycool.example.herokuapp.com";\n'
+    )
+
+
 def test_dashboard_request_contract_produces_all_mvp_outputs() -> None:
     payload = {
         "site": {

@@ -15,6 +15,7 @@ dependencies = [
   "httpx>=0.27,<1",
   "numpy>=2,<3",
   "pandas>=2.2,<3",
+  "psycopg[binary]>=3.2,<4",
   "pydantic>=2.10,<3",
   # <6 pre-approved a reportlab 5.x that does not exist yet, so a future major
   # release would install itself into the build with no review.

@@ -270,11 +270,43 @@ disables the UI.
 Without an API key, `POST /agent-tools/site-discovery` accepts at most four candidates and a
 shortlist of one, because a full request costs roughly ninety paid upstream activities.
 
-**Run a single worker.** `telemetry_store` and `job_manager` are per-process. Under `--workers 2` an
-upload can land on one worker and its run on another, and the analysis then proceeds silently on
-simulated data instead of the customer's telemetry, which is a wrong answer rather than an error.
+**Run a single worker on the smallest plan.** Runs, job traces, and normalized telemetry now share
+the configured database, so restarts do not erase completed work. One worker still fits the memory
+and database-connection budget of the low-cost deployment best.
 
 ## Deploying
+
+### Heroku backend with Vercel frontend
+
+The repository is ready for Heroku's Python buildpack: `.python-version` selects Python 3.13,
+`requirements.txt` installs the project, and `Procfile` starts the FastAPI web process on Heroku's
+assigned port. When Heroku Postgres is attached, the service uses `DATABASE_URL` automatically.
+Without it, local development continues to use SQLite.
+
+For the app named `fortycool`:
+
+```bash
+heroku login
+heroku git:remote -a fortycool
+heroku addons:create heroku-postgresql:essential-0 -a fortycool
+heroku config:set FORTYCOOL_CORS_ORIGINS=https://fortycool.vercel.app FORTYCOOL_TRUSTED_PROXY_HOPS=1 FORTYCOOL_THERMAL_PROVIDER=fixture FORTYCOOL_URBAN_PROVIDER=fixture -a fortycool
+git push heroku main
+heroku ps:resize web=basic -a fortycool
+heroku ps:scale web=1 -a fortycool
+heroku open -a fortycool
+```
+
+Use the app's actual `web_url` as `FORTYCOOL_PUBLIC_API_BASE` on Vercel. Every dashboard page loads
+`/dashboard/api-config.js` before the browser API client, so Vercel can send requests to Heroku while
+the dashboard remains on `fortycool.vercel.app`. The Heroku CORS allowlist above permits exactly that
+frontend origin.
+
+A Basic dyno is always on, but Heroku still cycles dynos at least daily and on every deploy or config
+change. Completed runs and uploads survive because they are in Postgres; an analysis executing at
+the exact moment of a restart is marked failed and can be submitted again. A single $7 Basic dyno
+plus $5 Essential-0 Postgres is appropriate for a demo, not a zero-downtime production SLA.
+
+### Other platforms
 
 `render.yaml` is a Render Blueprint: connect the repository and Render reads the
 service definition from it, so nothing is typed into a form and nothing is
@@ -295,10 +327,9 @@ fails:
 - No provider keys. A public deployment with `OPENAI_API_KEY` set publishes the
   copilot endpoint to anyone who finds the URL.
 
-On a free plan there is no persistent disk, so `FORTYCOOL_DB_PATH` points at
-scratch space and the run store resets whenever the instance restarts. Saved
-runs and `/demo/verified-run` do not survive a restart there; mount a volume at
-that path if you need them to.
+On a platform without `DATABASE_URL` or a persistent disk, `FORTYCOOL_DB_PATH`
+points at scratch space and the store resets whenever the instance restarts.
+Attach Postgres or mount a volume at that path if you need durable data.
 
 ## Continuous integration
 

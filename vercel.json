@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "env": {
     "FORTYCOOL_CORS_ORIGINS": "*",
+    "FORTYCOOL_PUBLIC_API_BASE": "https://fortycool-81024b6f2f51.herokuapp.com",
     "FORTYCOOL_DB_PATH": "/tmp/fortycool/runs.sqlite3",
     "FORTYCOOL_TRUSTED_PROXY_HOPS": "1",
     "FORTYCOOL_THERMAL_PROVIDER": "fixture",
